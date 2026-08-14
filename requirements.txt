@@ -1,0 +1,8 @@
+google-adk==2.6.3
+python-dotenv>=1.0.0
+fastapi>=0.110.0
+uvicorn>=0.29.0
+aiosqlite>=0.20.0
+sqlalchemy>=2.0.0
+python-dateutil>=2.9.0
+pypdf>=4.0.0
