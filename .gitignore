@@ -3,5 +3,6 @@
 __pycache__/
 *.pyc
 *.db
-data/uploads/
+data/*
+!data/contracts/
 .pytest_cache/

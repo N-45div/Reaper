@@ -1,0 +1,16 @@
+HOSTING AGREEMENT
+
+This Hosting Agreement is made between HostWave Systems ("Host") and
+Meridian Retail LLP ("Subscriber").
+
+1. SERVICE. Host provides dedicated hosting, Fleet plan, at $180.00 per month.
+
+2. TERM. The term of this Agreement runs from June 1, 2026 through May 31, 2027.
+
+3. RENEWAL AND TERMINATION. This Agreement renews automatically for additional
+one-year terms. Subscriber may opt out of renewal by providing written notice
+no later than sixty (90) days prior to the end of the then-current term, sent
+to support@hostwave.test.
+
+[Note: the written word and the numeral in clause 3 disagree — this contract
+exists to demonstrate the deterministic gate blocking an unverifiable deadline.]

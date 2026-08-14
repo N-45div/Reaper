@@ -1,0 +1,21 @@
+MASTER SUBSCRIPTION AGREEMENT
+
+This Master Subscription Agreement ("Agreement") is entered into between
+CloudCo Metrics ("Provider") and Meridian Retail LLP ("Customer").
+
+1. SERVICES. Provider will supply the CloudCo Metrics analytics platform,
+Professional tier, at a subscription fee of $299.00 per month, invoiced monthly.
+
+2. TERM. The Initial Term of this Agreement begins on January 1, 2026 and ends
+on December 31, 2026.
+
+3. RENEWAL. This Agreement shall automatically renew for successive twelve (12)
+month terms unless either party provides written notice of non-renewal at least
+sixty (60) days prior to the end of the then-current term. Notice of
+non-renewal must be delivered in writing to cancellations@cloudcometrics.test.
+
+4. FEES ON RENEWAL. Provider may increase subscription fees by up to seven
+percent (7%) upon each renewal.
+
+5. GOVERNING LAW. This Agreement is governed by the laws of the State of
+Delaware.

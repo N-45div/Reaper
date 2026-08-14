@@ -1,0 +1,22 @@
+SERVICES AGREEMENT
+
+This Services Agreement ("Agreement") is made between DataVault Pro
+("Company") and Meridian Retail LLP ("Client").
+
+1. SERVICES. Company provides managed backup and archival storage, Business
+plan, at a fee of $540.00 per month, invoiced monthly in advance.
+
+2. INITIAL TERM. The Initial Term commences on March 1, 2026 and expires on
+February 28, 2027.
+
+3. AUTOMATIC RENEWAL. Upon expiration of the Initial Term, this Agreement
+will renew automatically for successive one-year periods unless Client
+delivers written notice of termination no later than ninety (90) days prior
+to the expiration of the then-current term. All termination notices must be
+sent to accounts@datavaultpro.test.
+
+4. EARLY TERMINATION. Termination outside the notice window obligates Client
+to pay all fees for the remainder of the then-current term.
+
+5. ENTIRE AGREEMENT. This Agreement constitutes the entire agreement between
+the parties.
