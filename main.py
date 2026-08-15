@@ -52,23 +52,42 @@ async def _run(session_id: str, *, text: str | None = None,
     if invocation_id:
         kwargs["invocation_id"] = invocation_id
 
-    final_text, pending = None, None
-    async for event in runner.run_async(**kwargs):
-        lro_ids = getattr(event, "long_running_tool_ids", None) or set()
-        if event.content and event.content.parts:
-            for part in event.content.parts:
-                fc = getattr(part, "function_call", None)
-                if fc is not None and fc.id in lro_ids:
-                    pending = {
-                        "function_call_id": fc.id,
-                        "function_name": fc.name,
-                        "invocation_id": event.invocation_id,
-                    }
-        if event.is_final_response() and event.content and event.content.parts:
-            texts = [p.text for p in event.content.parts if getattr(p, "text", None)]
-            if texts:
-                final_text = "\n".join(texts)
-    return {"final_text": final_text, "pending": pending}
+    final_text, pending, degraded = None, None, None
+    try:
+        async for event in runner.run_async(**kwargs):
+            pending = _pending_approval(event) or pending
+            final_text = _final_text(event) or final_text
+    except Exception as exc:  # model quota/transient errors mid-run
+        # Tool effects already committed are in the ledger; the session is in
+        # SQL. Nothing is lost — report the ledger truth instead of a 500.
+        degraded = (
+            f"model call failed mid-run ({type(exc).__name__}); completed tool "
+            "actions are persisted in the ledger and the session is resumable"
+        )
+    return {"final_text": final_text, "pending": pending, "degraded": degraded}
+
+
+def _pending_approval(event) -> dict | None:
+    """Detect a long-running approval call pausing this run."""
+    lro_ids = getattr(event, "long_running_tool_ids", None) or set()
+    if not (event.content and event.content.parts):
+        return None
+    for part in event.content.parts:
+        fc = getattr(part, "function_call", None)
+        if fc is not None and fc.id in lro_ids:
+            return {
+                "function_call_id": fc.id,
+                "function_name": fc.name,
+                "invocation_id": event.invocation_id,
+            }
+    return None
+
+
+def _final_text(event) -> str | None:
+    if not (event.is_final_response() and event.content and event.content.parts):
+        return None
+    texts = [p.text for p in event.content.parts if getattr(p, "text", None)]
+    return "\n".join(texts) if texts else None
 
 
 @api.post("/contracts/upload")
@@ -158,7 +177,7 @@ async def invoice_arrived(obligation_id: int):
         text=f"VERIFY. The next invoice arrived for obligation {obligation_id}. "
              "Check it and act accordingly.",
     )
-    return {"report": result["final_text"],
+    return {"report": result["final_text"], "degraded": result["degraded"],
             "obligation": ledger.get_obligation(obligation_id)}
 
 
