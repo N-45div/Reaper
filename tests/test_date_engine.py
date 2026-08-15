@@ -55,6 +55,18 @@ def test_word_paren_conflict_is_ambiguous():
     assert any("conflicting" in r for r in d.reasons)
 
 
+def test_renewal_term_length_is_not_a_notice_period():
+    # "twelve (12) month terms" is the renewal duration, not a notice period.
+    d = derive_deadline(
+        "shall automatically renew for successive twelve (12) month terms unless "
+        "either party provides written notice at least sixty (60) days prior to "
+        "the end of the then-current term",
+        TERM_END,
+    )
+    assert d.status == "DERIVED"
+    assert d.deadline == date(2026, 11, 1)
+
+
 def test_multiple_periods_ambiguous():
     d = derive_deadline(
         "30 days notice for monthly plans and 60 days notice for annual plans, prior to the end of the term",

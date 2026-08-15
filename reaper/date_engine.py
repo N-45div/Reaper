@@ -72,6 +72,11 @@ def _find_periods(text: str) -> tuple[list[tuple[int, str]], list[str]]:
         candidates = {v for v in (word_val, paren_val, digit_val) if v is not None}
         if not candidates:
             continue
+        # A duration immediately naming the renewal term ("twelve (12) month
+        # terms", "successive 6 month periods") is the term length, not the
+        # notice period — skip it.
+        if re.match(r"\s*(?:terms?|periods?)\b", text[m.end():], re.IGNORECASE):
+            continue
         if len(candidates) > 1:
             reasons.append(
                 f"conflicting written and numeric values in '{m.group(0).strip()}'"
