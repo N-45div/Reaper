@@ -6,80 +6,89 @@
 <title>Reaper — auto-renewals, finished</title>
 <style>
   :root {
-    --ink: #14161a; --dim: #5c6470; --line: #e8eaee; --soft: #f6f7f9;
-    --accent: #3d5afe; --accent-ink: #2a3eb1; --ok: #1e8e3e; --bad: #d93025;
+    --paper: #fbfaf7; --ink: #191917; --muted: #6e6b63; --hair: #e4e2da;
+    --wax: #8c2318; --ledger: #1e5c3a; --amber: #8a6100;
+    --serif: Georgia, "Times New Roman", serif;
+    --sans: "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
   }
   * { box-sizing: border-box; margin: 0; }
   html { scroll-behavior: smooth; }
-  body { background: #fff; color: var(--ink); font: 16px/1.6 "Segoe UI", system-ui, sans-serif; }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  body { background: var(--paper); color: var(--ink); font: 16px/1.65 var(--sans); border-top: 6px solid var(--ink); }
+  .wrap { max-width: 1020px; margin: 0 auto; padding: 0 28px; }
+  ::selection { background: #f3e9d2; }
 
-  nav { display: flex; align-items: center; gap: 28px; padding: 20px 0; }
-  .mark { font-weight: 800; font-size: 19px; letter-spacing: 4px; }
-  .mark::after { content: "_"; color: var(--accent); }
-  nav a { color: var(--dim); text-decoration: none; font-size: 14px; }
+  nav { display: flex; align-items: baseline; gap: 30px; padding: 26px 0 22px; border-bottom: 1px solid var(--hair); }
+  .mark { font-family: var(--serif); font-size: 21px; font-weight: 700; letter-spacing: .5px; }
+  nav a { color: var(--muted); text-decoration: none; font-size: 14px; }
   nav a:hover { color: var(--ink); }
-  .cta { margin-left: auto; background: var(--accent); color: #fff !important; padding: 10px 22px; border-radius: 8px; font-weight: 600; }
-  .cta:hover { background: var(--accent-ink); }
+  nav .open { margin-left: auto; color: var(--ink); border: 1px solid var(--ink); padding: 9px 22px; font-size: 14px; font-weight: 600; transition: .15s; }
+  nav .open:hover { background: var(--ink); color: var(--paper); }
 
-  .hero { padding: 88px 0 64px; max-width: 780px; }
-  .hero h1 { font-size: 52px; line-height: 1.12; letter-spacing: -1px; font-weight: 800; }
-  .hero h1 em { font-style: normal; color: var(--accent); }
-  .hero p { margin: 24px 0 36px; font-size: 19px; color: var(--dim); max-width: 620px; }
-  .hero .actions { display: flex; gap: 14px; }
-  .btn { display: inline-block; padding: 14px 30px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 16px; }
-  .btn.primary { background: var(--accent); color: #fff; }
-  .btn.primary:hover { background: var(--accent-ink); }
-  .btn.ghost { color: var(--ink); border: 1px solid var(--line); }
-  .btn.ghost:hover { border-color: var(--ink); }
+  .hero { padding: 92px 0 30px; }
+  .hero .over { font-size: 12.5px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 26px; }
+  .hero h1 { font-family: var(--serif); font-weight: 500; font-size: 58px; line-height: 1.1; letter-spacing: -.5px; max-width: 780px; }
+  .hero h1 .strike { position: relative; white-space: nowrap; }
+  .hero h1 .strike::after { content: ""; position: absolute; left: -2%; right: -2%; top: 54%; height: 3px; background: var(--wax); transform: rotate(-1.2deg); }
+  .hero p { margin: 30px 0 40px; font-size: 18px; color: var(--muted); max-width: 640px; }
+  .btn { display: inline-block; padding: 14px 34px; font-size: 15.5px; font-weight: 600; text-decoration: none; border: 1px solid var(--ink); color: var(--ink); transition: .15s; }
+  .btn.solid { background: var(--ink); color: var(--paper); }
+  .btn.solid:hover { background: #000; }
+  .btn + .btn { margin-left: 12px; }
+  .btn:not(.solid):hover { background: #f1efe8; }
 
-  .strip { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--soft); }
-  .strip .wrap { display: flex; gap: 0; padding-top: 0; padding-bottom: 0; }
-  .stat { flex: 1; padding: 26px 20px; text-align: center; }
-  .stat + .stat { border-left: 1px solid var(--line); }
-  .stat b { display: block; font-size: 22px; }
-  .stat span { color: var(--dim); font-size: 13.5px; }
+  .ticker { border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-top: 74px; }
+  .ticker .wrap { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .t { padding: 22px 18px; border-left: 1px solid var(--hair); }
+  .t:first-child { border-left: 0; padding-left: 0; }
+  .t b { font-family: var(--serif); font-size: 21px; font-weight: 600; display: block; }
+  .t span { font-size: 13px; color: var(--muted); }
 
-  section { padding: 80px 0; }
-  .kicker { color: var(--accent); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; }
-  h2 { font-size: 34px; letter-spacing: -0.5px; margin: 10px 0 14px; }
-  .lead { color: var(--dim); max-width: 640px; }
+  section { padding: 86px 0 10px; }
+  .kick { font-size: 12.5px; letter-spacing: 3px; text-transform: uppercase; color: var(--wax); font-weight: 700; }
+  h2 { font-family: var(--serif); font-weight: 500; font-size: 36px; margin: 12px 0 14px; letter-spacing: -.3px; }
+  .lead { color: var(--muted); max-width: 620px; font-size: 16.5px; }
 
-  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 44px; }
-  .card { border: 1px solid var(--line); border-radius: 14px; padding: 28px; }
-  .card .ico { width: 44px; height: 44px; border-radius: 10px; background: #eef1ff; color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 18px; }
-  .card h3 { font-size: 18px; margin-bottom: 8px; }
-  .card p { color: var(--dim); font-size: 14.5px; }
+  .flow { margin-top: 54px; }
+  .frow { display: grid; grid-template-columns: 84px 1fr 220px; gap: 26px; padding: 30px 0; border-top: 1px solid var(--hair); align-items: baseline; }
+  .frow:last-child { border-bottom: 1px solid var(--hair); }
+  .fno { font-family: var(--serif); font-size: 34px; color: #c9c5ba; }
+  .frow h3 { font-size: 17px; margin-bottom: 6px; }
+  .frow p { color: var(--muted); font-size: 14.5px; max-width: 560px; }
+  .fnote { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; padding-top: 6px; }
+  .fnote em { color: var(--ledger); font-style: normal; font-weight: 700; }
 
-  .steps { counter-reset: s; margin-top: 44px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
-  .step { position: relative; padding: 26px 22px 22px; border: 1px solid var(--line); border-radius: 14px; }
-  .step::before { counter-increment: s; content: counter(s); position: absolute; top: -16px; left: 20px; width: 32px; height: 32px; border-radius: 50%; background: var(--ink); color: #fff; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; }
-  .step h3 { font-size: 16px; margin-bottom: 6px; }
-  .step p { color: var(--dim); font-size: 13.5px; }
-  .step .tag { display: inline-block; margin-top: 12px; font-size: 11.5px; font-weight: 600; color: var(--accent); background: #eef1ff; border-radius: 999px; padding: 3px 10px; }
+  .doc { margin-top: 54px; border: 1px solid var(--hair); background: #fff; box-shadow: 0 1px 0 var(--hair), 0 14px 40px rgba(25,25,23,.05); }
+  .doc .head { padding: 14px 26px; border-bottom: 1px solid var(--hair); display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .doc .clause { padding: 34px 40px 8px; font-family: var(--serif); font-size: 19px; line-height: 1.75; }
+  .doc .clause u { text-decoration-color: var(--wax); text-underline-offset: 4px; text-decoration-thickness: 2px; }
+  .doc .verdicts { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 26px 40px 38px; }
+  .vcol { padding: 16px 22px; border: 1px solid var(--hair); }
+  .vcol + .vcol { border-left: 0; }
+  .vcol .who { font-size: 11px; letter-spacing: 2.4px; text-transform: uppercase; color: var(--muted); }
+  .vcol .date { font-family: var(--mono); font-size: 21px; font-weight: 700; margin-top: 6px; }
+  .stamp { position: relative; float: right; margin: -6px 34px 0 0; transform: rotate(-7deg); border: 3px double var(--ledger); color: var(--ledger); font-weight: 800; font-size: 15px; letter-spacing: 3px; padding: 7px 16px; text-transform: uppercase; opacity: .9; }
+  .doc .foot { border-top: 1px solid var(--hair); padding: 15px 26px; font-size: 13.5px; color: var(--muted); }
+  .doc .foot b { color: var(--wax); }
 
-  .gate-demo { margin-top: 44px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-  .gate-demo .bar { background: var(--soft); border-bottom: 1px solid var(--line); padding: 12px 20px; font-size: 13px; color: var(--dim); }
-  .gate-demo .body { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 30px 20px; gap: 14px; }
-  .side { text-align: center; }
-  .side .who { font-size: 12.5px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dim); }
-  .side .val { font-size: 26px; font-weight: 700; font-family: ui-monospace, monospace; margin-top: 6px; }
-  .verdict { text-align: center; }
-  .verdict .eq { font-size: 30px; font-weight: 800; color: var(--ok); }
-  .verdict .chip { display: block; margin-top: 6px; font-size: 12px; font-weight: 700; color: var(--ok); }
-  .gate-demo .foot { border-top: 1px solid var(--line); padding: 14px 20px; font-size: 13.5px; color: var(--dim); }
-  .gate-demo .foot b { color: var(--bad); }
+  .traits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 54px; border: 1px solid var(--hair); background: #fff; }
+  .trait { padding: 30px 28px; border-left: 1px solid var(--hair); }
+  .trait:first-child { border-left: 0; }
+  .trait h3 { font-family: var(--serif); font-weight: 600; font-size: 18px; margin-bottom: 8px; }
+  .trait p { font-size: 14px; color: var(--muted); }
+  .trait .rule { width: 34px; height: 3px; background: var(--wax); margin-bottom: 18px; }
 
-  .closing { background: var(--ink); color: #fff; border-radius: 18px; padding: 56px; display: flex; align-items: center; justify-content: space-between; gap: 30px; }
-  .closing h2 { color: #fff; margin: 0 0 8px; font-size: 28px; }
-  .closing p { color: #aab1bd; font-size: 15px; max-width: 520px; }
-
-  footer { padding: 36px 0 46px; color: var(--dim); font-size: 13px; display: flex; gap: 8px; align-items: center; }
-  @media (max-width: 860px) {
-    .hero h1 { font-size: 36px; }
-    .cards, .steps { grid-template-columns: 1fr; }
-    .closing { flex-direction: column; align-items: flex-start; }
-    .strip .wrap { flex-wrap: wrap; }
+  .close { margin: 100px 0 90px; padding: 60px 0 0; border-top: 1px solid var(--ink); display: flex; justify-content: space-between; align-items: flex-end; gap: 40px; }
+  .close h2 { font-size: 40px; max-width: 520px; }
+  footer { border-top: 1px solid var(--hair); padding: 26px 0 40px; font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
+  footer .mono { font-family: var(--mono); font-size: 12px; }
+  @media (max-width: 900px) {
+    .hero h1 { font-size: 38px; }
+    .ticker .wrap, .traits { grid-template-columns: 1fr; }
+    .t, .trait { border-left: 0; border-top: 1px solid var(--hair); }
+    .frow { grid-template-columns: 1fr; gap: 8px; }
+    .fnote { text-align: left; }
+    .close { flex-direction: column; align-items: flex-start; }
   }
 </style>
 </head>
@@ -87,120 +96,115 @@
 
 <div class="wrap">
   <nav>
-    <span class="mark">REAPER</span>
-    <a href="#how">How it works</a>
+    <span class="mark">Reaper</span>
+    <a href="#method">Method</a>
     <a href="#gate">The gate</a>
-    <a class="cta" href="/app">Open the app</a>
+    <a class="open" href="/app">Open the ledger</a>
   </nav>
 
   <div class="hero">
-    <h1>Your contracts renew themselves.<br><em>Reaper ends that.</em></h1>
-    <p>Every renewal tool stops at reminding you. Reaper reads the contract,
-    verifies the deadline with deterministic calendar math, sleeps until the
-    notice window, sends the cancellation after your one approval — then reads
-    the next invoice to prove the vendor actually stopped billing. If they
-    didn't, it files the dispute itself, evidence attached.</p>
-    <div class="actions">
-      <a class="btn primary" href="/app">Add your first contract</a>
-      <a class="btn ghost" href="#how">See how it works</a>
-    </div>
+    <div class="over">Contract renewal · autonomous obligation agent</div>
+    <h1>Your vendors are counting on you to <span class="strike">forget</span>.<br>Reaper doesn't.</h1>
+    <p>Renewal tools remind you, then leave the chore on your desk. Reaper reads the
+    contract, proves the deadline with calendar arithmetic, sleeps until the notice
+    window, sends the cancellation after your single approval — and weeks later reads
+    the next invoice to confirm the vendor actually stopped charging. If they didn't,
+    it files the dispute itself, receipt attached.</p>
+    <a class="btn solid" href="/app">Add a contract</a>
+    <a class="btn" href="#method">Read the method</a>
   </div>
 </div>
 
-<div class="strip">
+<div class="ticker">
   <div class="wrap">
-    <div class="stat"><b>0 missed</b><span>deadlines — every date double-derived</span></div>
-    <div class="stat"><b>1 approval</b><span>is all a cancellation needs from you</span></div>
-    <div class="stat"><b>Weeks asleep</b><span>zero tokens burned between deadlines</span></div>
-    <div class="stat"><b>SHA-256</b><span>hash-chained evidence for every action</span></div>
+    <div class="t"><b>Twice-derived</b><span>every deadline — model and machine must agree</span></div>
+    <div class="t"><b>One signature</b><span>your only appearance in the pipeline</span></div>
+    <div class="t"><b>Weeks asleep</b><span>durable state, zero tokens burned</span></div>
+    <div class="t"><b>Hash-chained</b><span>every action, tamper-evident</span></div>
   </div>
 </div>
 
 <div class="wrap">
-  <section id="how">
-    <span class="kicker">How it works</span>
-    <h2>From upload to proof, without you in the middle</h2>
-    <p class="lead">One upload starts a months-long autonomous pipeline. You appear exactly once — to approve the notice before it goes out.</p>
-    <div class="steps">
-      <div class="step">
-        <h3>Read &amp; verify</h3>
-        <p>Gemini quotes the renewal clause verbatim; an independent deterministic date engine re-derives the notice deadline from the raw text. Any disagreement blocks scheduling.</p>
-        <span class="tag">the gate</span>
+  <section id="method">
+    <div class="kick">The method</div>
+    <h2>Four acts, one appearance by you</h2>
+    <p class="lead">One upload starts a months-long pipeline. Nothing waits on your memory.</p>
+    <div class="flow">
+      <div class="frow">
+        <div class="fno">I</div>
+        <div><h3>Read, then verify the reading</h3>
+        <p>Gemini quotes the auto-renewal clause verbatim and proposes the notice deadline.
+        A deterministic date engine re-derives that deadline from the raw clause text —
+        pure calendar arithmetic, no model. Disagreement blocks scheduling.</p></div>
+        <div class="fnote">gate verdict: <em>MATCH</em> · MISMATCH · AMBIGUOUS</div>
       </div>
-      <div class="step">
-        <h3>Sleep on it</h3>
-        <p>The obligation is scheduled and the agent goes durably to sleep — for weeks if needed. State lives in the database, not in a process.</p>
-        <span class="tag">zero token burn</span>
+      <div class="frow">
+        <div class="fno">II</div>
+        <div><h3>Sleep like a ledger, not a chatbot</h3>
+        <p>The obligation is filed and the agent goes durably dormant — for weeks if the
+        contract demands it. State lives in the database, not in a process that must stay alive.</p></div>
+        <div class="fnote">tokens burned while waiting: <em>0</em></div>
       </div>
-      <div class="step">
-        <h3>Notice, approved by you</h3>
-        <p>Inside the notice window it wakes, drafts the formal non-renewal notice and pauses for your approval. The pause survives restarts. Then it sends, and hash-stamps the delivery receipt.</p>
-        <span class="tag">one human approval</span>
+      <div class="frow">
+        <div class="fno">III</div>
+        <div><h3>Notice, under your signature</h3>
+        <p>Inside the window it wakes, drafts the formal non-renewal notice, and pauses for
+        your approval — a pause that survives restarts and redeploys. On your word it sends,
+        and hash-stamps the delivery receipt into the ledger.</p></div>
+        <div class="fnote">human approvals required: <em>1</em></div>
       </div>
-      <div class="step">
-        <h3>Trust, then verify</h3>
-        <p>When the next invoice lands, a deterministic check confirms billing stopped. If the vendor billed anyway, Reaper opens the dispute — attaching its own timestamped receipt as evidence.</p>
-        <span class="tag">the closed loop</span>
+      <div class="frow">
+        <div class="fno">IV</div>
+        <div><h3>Trust, then verify, then fight</h3>
+        <p>When the vendor's next invoice arrives, a deterministic check confirms billing
+        stopped. If they charged anyway, Reaper opens the dispute unprompted — attaching its
+        own timestamped delivery receipt as evidence.</p></div>
+        <div class="fnote">outcome: <em>VERIFIED</em> · DISPUTED</div>
       </div>
     </div>
   </section>
 
   <section id="gate">
-    <span class="kicker">Why it's different</span>
-    <h2>An AI that refuses to trust itself</h2>
-    <p class="lead">A hallucinated date must never become a missed deadline. So every deadline is derived twice — once by the model, once by plain calendar math — and nothing is scheduled unless they agree.</p>
+    <div class="kick">Why it's different</div>
+    <h2>An agent that refuses to trust itself</h2>
+    <p class="lead">A hallucinated date must never become a missed deadline. So no obligation is
+    scheduled unless the model's reading and the machine's arithmetic agree, to the day.</p>
 
-    <div class="gate-demo">
-      <div class="bar">"…written notice of non-renewal at least sixty (60) days prior to the end of the then-current term…" · term ends Dec 31, 2026</div>
-      <div class="body">
-        <div class="side">
-          <span class="who">Gemini reads</span>
-          <div class="val">Nov 1, 2026</div>
-        </div>
-        <div class="verdict">
-          <span class="eq">=</span>
-          <span class="chip">MATCH — SCHEDULED</span>
-        </div>
-        <div class="side">
-          <span class="who">Engine derives</span>
-          <div class="val">Nov 1, 2026</div>
-        </div>
+    <div class="doc">
+      <div class="head"><span>EXHIBIT A — Master Subscription Agreement, §3 Renewal</span><span>term ends 2026-12-31</span></div>
+      <div class="clause">“…automatically renew for successive twelve (12) month terms unless either
+      party provides written notice of non-renewal at least <u>sixty (60) days prior to the end
+      of the then-current term</u>…”</div>
+      <div class="stamp">Match · Scheduled</div>
+      <div class="verdicts">
+        <div class="vcol"><div class="who">The model reads</div><div class="date">1 Nov 2026</div></div>
+        <div class="vcol"><div class="who">The engine derives</div><div class="date">1 Nov 2026</div></div>
       </div>
-      <div class="foot">And when a clause says <b>"sixty (90) days"</b>? The engine flags the conflict and scheduling is <b>blocked</b> for human review — honestly, on the record.</div>
+      <div class="foot">And when a clause says <b>“sixty (90) days”</b>? The engine declares the conflict
+      and scheduling is <b>blocked</b> for human review — on the record, honestly.</div>
     </div>
 
-    <div class="cards">
-      <div class="card">
-        <div class="ico">⏸</div>
-        <h3>Pauses that survive anything</h3>
-        <p>Waiting for your approval, the agent can be killed, redeployed or restarted — and resumes exactly where it paused. Durability is the architecture, not a feature flag.</p>
-      </div>
-      <div class="card">
-        <div class="ico">⛓</div>
-        <h3>Evidence that fights back</h3>
-        <p>Every action lands in a SHA-256 hash-chained ledger. When a vendor bills after cancelling, the dispute ships with your delivery receipt — tamper-evident, timestamped.</p>
-      </div>
-      <div class="card">
-        <div class="ico">✓</div>
-        <h3>Outcomes, not alerts</h3>
-        <p>Reminders get ignored. Reaper closes the loop: notice sent, billing verified stopped, or dispute filed. The chore is finished, not forwarded to you.</p>
-      </div>
+    <div class="traits">
+      <div class="trait"><div class="rule"></div><h3>Pauses that survive anything</h3>
+        <p>Kill the process while it waits for your approval. Restart it tomorrow. The run resumes
+        at the exact paused instruction — durability is the architecture, not a feature flag.</p></div>
+      <div class="trait"><div class="rule"></div><h3>Evidence that fights back</h3>
+        <p>Every action is appended to a SHA-256 hash chain. Alter one historical record and the
+        chain visibly breaks. Disputes ship with proof, not complaints.</p></div>
+      <div class="trait"><div class="rule"></div><h3>Outcomes, not alerts</h3>
+        <p>A reminder transfers the chore back to you. Reaper closes the loop: notice sent, billing
+        verified stopped, or dispute filed. Finished is the only deliverable.</p></div>
     </div>
   </section>
 
-  <section>
-    <div class="closing">
-      <div>
-        <h2>Put your renewals on autopilot</h2>
-        <p>Upload a contract and watch the whole pipeline — extraction, the gate, the sleep, the notice, the proof — run on its own.</p>
-      </div>
-      <a class="btn primary" href="/app">Open the app</a>
-    </div>
-  </section>
+  <div class="close">
+    <h2>Put the renewals on the ledger.</h2>
+    <a class="btn solid" href="/app">Open the ledger</a>
+  </div>
 
   <footer>
-    <span class="mark" style="font-size:13px">REAPER</span>
-    <span>· an autonomous agent built on Google ADK, Gemini &amp; Google Cloud</span>
+    <span><span class="mark" style="font-size:15px">Reaper</span> — an autonomous obligation agent</span>
+    <span class="mono">Google ADK 2.6 · Gemini · Gemma · Cloud Run</span>
   </footer>
 </div>
 
