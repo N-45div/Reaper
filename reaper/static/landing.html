@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reaper — auto-renewals, finished</title>
+<style>
+  :root {
+    --ink: #14161a; --dim: #5c6470; --line: #e8eaee; --soft: #f6f7f9;
+    --accent: #3d5afe; --accent-ink: #2a3eb1; --ok: #1e8e3e; --bad: #d93025;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: #fff; color: var(--ink); font: 16px/1.6 "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+
+  nav { display: flex; align-items: center; gap: 28px; padding: 20px 0; }
+  .mark { font-weight: 800; font-size: 19px; letter-spacing: 4px; }
+  .mark::after { content: "_"; color: var(--accent); }
+  nav a { color: var(--dim); text-decoration: none; font-size: 14px; }
+  nav a:hover { color: var(--ink); }
+  .cta { margin-left: auto; background: var(--accent); color: #fff !important; padding: 10px 22px; border-radius: 8px; font-weight: 600; }
+  .cta:hover { background: var(--accent-ink); }
+
+  .hero { padding: 88px 0 64px; max-width: 780px; }
+  .hero h1 { font-size: 52px; line-height: 1.12; letter-spacing: -1px; font-weight: 800; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero p { margin: 24px 0 36px; font-size: 19px; color: var(--dim); max-width: 620px; }
+  .hero .actions { display: flex; gap: 14px; }
+  .btn { display: inline-block; padding: 14px 30px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 16px; }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-ink); }
+  .btn.ghost { color: var(--ink); border: 1px solid var(--line); }
+  .btn.ghost:hover { border-color: var(--ink); }
+
+  .strip { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--soft); }
+  .strip .wrap { display: flex; gap: 0; padding-top: 0; padding-bottom: 0; }
+  .stat { flex: 1; padding: 26px 20px; text-align: center; }
+  .stat + .stat { border-left: 1px solid var(--line); }
+  .stat b { display: block; font-size: 22px; }
+  .stat span { color: var(--dim); font-size: 13.5px; }
+
+  section { padding: 80px 0; }
+  .kicker { color: var(--accent); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; }
+  h2 { font-size: 34px; letter-spacing: -0.5px; margin: 10px 0 14px; }
+  .lead { color: var(--dim); max-width: 640px; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 44px; }
+  .card { border: 1px solid var(--line); border-radius: 14px; padding: 28px; }
+  .card .ico { width: 44px; height: 44px; border-radius: 10px; background: #eef1ff; color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 18px; }
+  .card h3 { font-size: 18px; margin-bottom: 8px; }
+  .card p { color: var(--dim); font-size: 14.5px; }
+
+  .steps { counter-reset: s; margin-top: 44px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+  .step { position: relative; padding: 26px 22px 22px; border: 1px solid var(--line); border-radius: 14px; }
+  .step::before { counter-increment: s; content: counter(s); position: absolute; top: -16px; left: 20px; width: 32px; height: 32px; border-radius: 50%; background: var(--ink); color: #fff; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+  .step h3 { font-size: 16px; margin-bottom: 6px; }
+  .step p { color: var(--dim); font-size: 13.5px; }
+  .step .tag { display: inline-block; margin-top: 12px; font-size: 11.5px; font-weight: 600; color: var(--accent); background: #eef1ff; border-radius: 999px; padding: 3px 10px; }
+
+  .gate-demo { margin-top: 44px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .gate-demo .bar { background: var(--soft); border-bottom: 1px solid var(--line); padding: 12px 20px; font-size: 13px; color: var(--dim); }
+  .gate-demo .body { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 30px 20px; gap: 14px; }
+  .side { text-align: center; }
+  .side .who { font-size: 12.5px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dim); }
+  .side .val { font-size: 26px; font-weight: 700; font-family: ui-monospace, monospace; margin-top: 6px; }
+  .verdict { text-align: center; }
+  .verdict .eq { font-size: 30px; font-weight: 800; color: var(--ok); }
+  .verdict .chip { display: block; margin-top: 6px; font-size: 12px; font-weight: 700; color: var(--ok); }
+  .gate-demo .foot { border-top: 1px solid var(--line); padding: 14px 20px; font-size: 13.5px; color: var(--dim); }
+  .gate-demo .foot b { color: var(--bad); }
+
+  .closing { background: var(--ink); color: #fff; border-radius: 18px; padding: 56px; display: flex; align-items: center; justify-content: space-between; gap: 30px; }
+  .closing h2 { color: #fff; margin: 0 0 8px; font-size: 28px; }
+  .closing p { color: #aab1bd; font-size: 15px; max-width: 520px; }
+
+  footer { padding: 36px 0 46px; color: var(--dim); font-size: 13px; display: flex; gap: 8px; align-items: center; }
+  @media (max-width: 860px) {
+    .hero h1 { font-size: 36px; }
+    .cards, .steps { grid-template-columns: 1fr; }
+    .closing { flex-direction: column; align-items: flex-start; }
+    .strip .wrap { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav>
+    <span class="mark">REAPER</span>
+    <a href="#how">How it works</a>
+    <a href="#gate">The gate</a>
+    <a class="cta" href="/app">Open the app</a>
+  </nav>
+
+  <div class="hero">
+    <h1>Your contracts renew themselves.<br><em>Reaper ends that.</em></h1>
+    <p>Every renewal tool stops at reminding you. Reaper reads the contract,
+    verifies the deadline with deterministic calendar math, sleeps until the
+    notice window, sends the cancellation after your one approval — then reads
+    the next invoice to prove the vendor actually stopped billing. If they
+    didn't, it files the dispute itself, evidence attached.</p>
+    <div class="actions">
+      <a class="btn primary" href="/app">Add your first contract</a>
+      <a class="btn ghost" href="#how">See how it works</a>
+    </div>
+  </div>
+</div>
+
+<div class="strip">
+  <div class="wrap">
+    <div class="stat"><b>0 missed</b><span>deadlines — every date double-derived</span></div>
+    <div class="stat"><b>1 approval</b><span>is all a cancellation needs from you</span></div>
+    <div class="stat"><b>Weeks asleep</b><span>zero tokens burned between deadlines</span></div>
+    <div class="stat"><b>SHA-256</b><span>hash-chained evidence for every action</span></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <section id="how">
+    <span class="kicker">How it works</span>
+    <h2>From upload to proof, without you in the middle</h2>
+    <p class="lead">One upload starts a months-long autonomous pipeline. You appear exactly once — to approve the notice before it goes out.</p>
+    <div class="steps">
+      <div class="step">
+        <h3>Read &amp; verify</h3>
+        <p>Gemini quotes the renewal clause verbatim; an independent deterministic date engine re-derives the notice deadline from the raw text. Any disagreement blocks scheduling.</p>
+        <span class="tag">the gate</span>
+      </div>
+      <div class="step">
+        <h3>Sleep on it</h3>
+        <p>The obligation is scheduled and the agent goes durably to sleep — for weeks if needed. State lives in the database, not in a process.</p>
+        <span class="tag">zero token burn</span>
+      </div>
+      <div class="step">
+        <h3>Notice, approved by you</h3>
+        <p>Inside the notice window it wakes, drafts the formal non-renewal notice and pauses for your approval. The pause survives restarts. Then it sends, and hash-stamps the delivery receipt.</p>
+        <span class="tag">one human approval</span>
+      </div>
+      <div class="step">
+        <h3>Trust, then verify</h3>
+        <p>When the next invoice lands, a deterministic check confirms billing stopped. If the vendor billed anyway, Reaper opens the dispute — attaching its own timestamped receipt as evidence.</p>
+        <span class="tag">the closed loop</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="gate">
+    <span class="kicker">Why it's different</span>
+    <h2>An AI that refuses to trust itself</h2>
+    <p class="lead">A hallucinated date must never become a missed deadline. So every deadline is derived twice — once by the model, once by plain calendar math — and nothing is scheduled unless they agree.</p>
+
+    <div class="gate-demo">
+      <div class="bar">"…written notice of non-renewal at least sixty (60) days prior to the end of the then-current term…" · term ends Dec 31, 2026</div>
+      <div class="body">
+        <div class="side">
+          <span class="who">Gemini reads</span>
+          <div class="val">Nov 1, 2026</div>
+        </div>
+        <div class="verdict">
+          <span class="eq">=</span>
+          <span class="chip">MATCH — SCHEDULED</span>
+        </div>
+        <div class="side">
+          <span class="who">Engine derives</span>
+          <div class="val">Nov 1, 2026</div>
+        </div>
+      </div>
+      <div class="foot">And when a clause says <b>"sixty (90) days"</b>? The engine flags the conflict and scheduling is <b>blocked</b> for human review — honestly, on the record.</div>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="ico">⏸</div>
+        <h3>Pauses that survive anything</h3>
+        <p>Waiting for your approval, the agent can be killed, redeployed or restarted — and resumes exactly where it paused. Durability is the architecture, not a feature flag.</p>
+      </div>
+      <div class="card">
+        <div class="ico">⛓</div>
+        <h3>Evidence that fights back</h3>
+        <p>Every action lands in a SHA-256 hash-chained ledger. When a vendor bills after cancelling, the dispute ships with your delivery receipt — tamper-evident, timestamped.</p>
+      </div>
+      <div class="card">
+        <div class="ico">✓</div>
+        <h3>Outcomes, not alerts</h3>
+        <p>Reminders get ignored. Reaper closes the loop: notice sent, billing verified stopped, or dispute filed. The chore is finished, not forwarded to you.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="closing">
+      <div>
+        <h2>Put your renewals on autopilot</h2>
+        <p>Upload a contract and watch the whole pipeline — extraction, the gate, the sleep, the notice, the proof — run on its own.</p>
+      </div>
+      <a class="btn primary" href="/app">Open the app</a>
+    </div>
+  </section>
+
+  <footer>
+    <span class="mark" style="font-size:13px">REAPER</span>
+    <span>· an autonomous agent built on Google ADK, Gemini &amp; Google Cloud</span>
+  </footer>
+</div>
+
+</body>
+</html>

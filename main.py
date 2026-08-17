@@ -96,6 +96,11 @@ def _final_text(event) -> str | None:
 
 
 @api.get("/")
+async def landing():
+    return FileResponse(STATIC_DIR / "landing.html")
+
+
+@api.get("/app")
 async def dashboard():
     return FileResponse(STATIC_DIR / "index.html")
 
@@ -107,23 +112,12 @@ async def demo_reset():
     return {"ok": True}
 
 
-@api.post("/contracts/upload")
-async def upload_contract(file: UploadFile):
-    raw = await file.read()
-    if file.filename.lower().endswith(".pdf"):
-        from pypdf import PdfReader
-        reader = PdfReader(io.BytesIO(raw))
-        text = "\n".join(page.extract_text() or "" for page in reader.pages)
-    else:
-        text = raw.decode("utf-8", errors="replace")
-    if not text.strip():
-        raise HTTPException(422, "could not extract any text from the file")
-
+async def _intake(text: str) -> dict:
     # Gemma triage: skip the expensive agent run when there is no renewal
     # clause at all. Fails open — triage never blocks a real contract.
     triage = triage_contract(text)
     if triage["ok"] and not triage["has_renewal"]:
-        return {"session_id": None, "triage": triage,
+        return {"session_id": None, "triage": triage, "degraded": None,
                 "report": "Triage: no auto-renewal clause found in this "
                           f"document ({triage['model']}). Nothing to schedule.",
                 "obligations": ledger.list_obligations()}
@@ -137,6 +131,25 @@ async def upload_contract(file: UploadFile):
     return {"session_id": session_id, "report": result["final_text"],
             "triage": triage, "degraded": result["degraded"],
             "obligations": ledger.list_obligations()}
+
+
+@api.post("/contracts/upload")
+async def upload_contract(file: UploadFile):
+    raw = await file.read()
+    if file.filename.lower().endswith(".pdf"):
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(raw))
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    else:
+        text = raw.decode("utf-8", errors="replace")
+    if not text.strip():
+        raise HTTPException(422, "could not extract any text from the file")
+    return await _intake(text)
+
+
+@api.get("/activity")
+async def activity():
+    return ledger.recent_activity()
 
 
 @api.post("/obligations/{obligation_id}/notice-window")

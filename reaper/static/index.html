@@ -3,145 +3,297 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Reaper</title>
+<title>Reaper — app</title>
 <style>
   :root {
-    --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #e6edf3;
-    --dim: #8b949e; --accent: #58a6ff; --ok: #3fb950; --warn: #d29922;
-    --bad: #f85149; --violet: #bc8cff;
+    --ink: #14161a; --dim: #5c6470; --line: #e8eaee; --soft: #f6f7f9;
+    --accent: #3d5afe; --accent-ink: #2a3eb1; --accent-soft: #eef1ff;
+    --ok: #1e8e3e; --ok-soft: #e6f4ea; --warn: #b26a00; --warn-soft: #fef3e0;
+    --bad: #d93025; --bad-soft: #fdecea; --violet: #7c4dff; --violet-soft: #f1ecff;
   }
   * { box-sizing: border-box; margin: 0; }
-  body { background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
-  header { padding: 18px 28px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 14px; }
-  header h1 { font-size: 20px; letter-spacing: 3px; }
-  header span { color: var(--dim); font-size: 13px; }
-  header button { margin-left: auto; }
-  main { display: grid; grid-template-columns: 340px 1fr; gap: 18px; padding: 18px 28px; max-width: 1300px; }
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
-  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: var(--dim); margin-bottom: 12px; }
-  #drop { border: 2px dashed var(--border); border-radius: 8px; padding: 22px; text-align: center; color: var(--dim); cursor: pointer; transition: .15s; }
-  #drop.hover, #drop:hover { border-color: var(--accent); color: var(--accent); }
-  .ob { padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; margin-top: 10px; cursor: pointer; }
-  .ob.sel { border-color: var(--accent); }
-  .ob .v { font-weight: 600; }
-  .pill { font-size: 11px; padding: 2px 9px; border-radius: 999px; border: 1px solid; float: right; }
-  .s-SCHEDULED { color: var(--accent); } .s-AWAITING_APPROVAL { color: var(--warn); }
-  .s-NOTICE_SENT { color: var(--violet); } .s-VERIFIED { color: var(--ok); }
-  .s-REFUTED, .s-BLOCKED { color: var(--bad); } .s-DISPUTED { color: var(--bad); }
-  button { background: #21262d; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
-  button:hover { border-color: var(--accent); }
-  button.primary { background: #1f6feb; border-color: #1f6feb; }
-  button.danger { background: transparent; border-color: var(--bad); color: var(--bad); }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
-  .kv { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; font-size: 13px; margin-bottom: 10px; }
-  .kv .k { color: var(--dim); }
-  .gate { font-family: ui-monospace, monospace; font-size: 13px; }
-  .gate.MATCH { color: var(--ok); } .gate.MISMATCH, .gate.AMBIGUOUS { color: var(--bad); }
-  #chain { margin-top: 8px; }
-  .rc { display: flex; gap: 12px; padding: 8px 0; border-left: 2px solid var(--border); padding-left: 14px; margin-left: 6px; position: relative; }
-  .rc::before { content: ""; position: absolute; left: -5px; top: 14px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
-  .rc .kind { font-weight: 600; min-width: 170px; font-size: 13px; }
-  .rc .hash { font-family: ui-monospace, monospace; font-size: 11px; color: var(--dim); word-break: break-all; }
-  .rc .ts { color: var(--dim); font-size: 11px; min-width: 150px; }
-  #report { white-space: pre-wrap; font-size: 13px; color: var(--dim); max-height: 260px; overflow-y: auto; margin-top: 8px; }
-  .intact { color: var(--ok); } .broken { color: var(--bad); }
-  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 12px 18px; font-size: 13px; display: none; }
-  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--dim); border-top-color: var(--accent); border-radius: 50%; animation: r 0.8s linear infinite; vertical-align: -2px; }
+  body { background: var(--soft); color: var(--ink); font: 14.5px/1.55 "Segoe UI", system-ui, sans-serif; }
+  a { color: var(--accent); text-decoration: none; }
+
+  header { background: #fff; border-bottom: 1px solid var(--line); padding: 14px 28px; display: flex; align-items: center; gap: 16px; }
+  .mark { font-weight: 800; font-size: 16px; letter-spacing: 3px; }
+  .mark::after { content: "_"; color: var(--accent); }
+  header .sub { color: var(--dim); font-size: 13px; }
+  header .right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--dim); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
+
+  main { display: grid; grid-template-columns: 320px minmax(0,1fr) 300px; gap: 20px; padding: 22px 28px; max-width: 1440px; margin: 0 auto; }
+  .panel { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1.8px; color: var(--dim); margin-bottom: 12px; font-weight: 700; }
+
+  #drop { border: 2px dashed var(--line); border-radius: 10px; padding: 26px 16px; text-align: center; color: var(--dim); cursor: pointer; transition: .15s; background: var(--soft); }
+  #drop:hover, #drop.hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  #drop b { display: block; color: inherit; font-size: 14.5px; margin-bottom: 3px; }
+  #drop small { font-size: 12px; }
+
+  .ob { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; margin-top: 10px; cursor: pointer; background: #fff; transition: .12s; }
+  .ob:hover { border-color: #c9cdd4; }
+  .ob.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .ob .v { font-weight: 600; font-size: 14px; }
+  .ob .d { font-size: 12px; color: var(--dim); margin-top: 2px; }
+  .chip { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; float: right; }
+  .c-SCHEDULED { background: var(--accent-soft); color: var(--accent-ink); }
+  .c-AWAITING_APPROVAL { background: var(--warn-soft); color: var(--warn); }
+  .c-NOTICE_SENT { background: var(--violet-soft); color: var(--violet); }
+  .c-VERIFIED { background: var(--ok-soft); color: var(--ok); }
+  .c-BLOCKED, .c-REFUTED, .c-DISPUTED { background: var(--bad-soft); color: var(--bad); }
+
+  .empty { text-align: center; padding: 60px 30px; color: var(--dim); }
+  .empty h3 { color: var(--ink); font-size: 20px; margin-bottom: 10px; }
+  .empty p { max-width: 420px; margin: 0 auto 6px; font-size: 14px; }
+
+  /* journey stepper */
+  .journey { display: flex; align-items: flex-start; margin: 6px 0 4px; }
+  .jstep { flex: 1; text-align: center; position: relative; }
+  .jstep .ball { width: 30px; height: 30px; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; font-size: 13px; background: #fff; border: 2px solid var(--line); color: var(--dim); position: relative; z-index: 1; }
+  .jstep .lbl { font-size: 11.5px; color: var(--dim); margin-top: 6px; font-weight: 600; }
+  .jstep::before { content: ""; position: absolute; top: 15px; left: -50%; width: 100%; height: 2px; background: var(--line); }
+  .jstep:first-child::before { display: none; }
+  .jstep.done .ball { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .jstep.done::before { background: var(--ink); }
+  .jstep.active .ball { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 5px var(--accent-soft); animation: pulse 1.6s ease-in-out infinite; }
+  .jstep.active::before { background: var(--ink); }
+  .jstep.active .lbl { color: var(--accent); }
+  .jstep.fail .ball { background: var(--bad); border-color: var(--bad); color: #fff; }
+  .jstep.fail::before { background: var(--ink); }
+  .jstep.fail .lbl { color: var(--bad); }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 9px rgba(61,90,254,.08); } }
+
+  .story { border-radius: 10px; padding: 14px 18px; margin: 16px 0; font-size: 14.5px; display: flex; gap: 12px; align-items: flex-start; }
+  .story .big { font-size: 20px; line-height: 1.3; }
+  .story.tone-blue { background: var(--accent-soft); }
+  .story.tone-amber { background: var(--warn-soft); }
+  .story.tone-green { background: var(--ok-soft); }
+  .story.tone-red { background: var(--bad-soft); }
+  .story.tone-violet { background: var(--violet-soft); }
+  .story b { display: block; margin-bottom: 2px; }
+  .story span { color: var(--dim); font-size: 13px; }
+
+  .gatecard { border: 1px solid var(--line); border-radius: 10px; margin: 14px 0; overflow: hidden; }
+  .gatecard .q { padding: 10px 16px; background: var(--soft); border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--dim); font-style: italic; }
+  .gatecard .cmp { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 16px; gap: 10px; }
+  .gside { text-align: center; }
+  .gside .who { font-size: 11px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--dim); font-weight: 700; }
+  .gside .val { font-family: ui-monospace, monospace; font-size: 19px; font-weight: 700; margin-top: 3px; }
+  .gv { text-align: center; font-weight: 800; }
+  .gv .eq { font-size: 24px; }
+  .gv .t { display: block; font-size: 10.5px; letter-spacing: 1px; }
+  .gv.MATCH { color: var(--ok); } .gv.MISMATCH, .gv.AMBIGUOUS { color: var(--bad); }
+
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 4px; }
+  button { background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 9px 18px; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: .12s; }
+  button:hover { border-color: var(--ink); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: var(--accent-ink); }
+  button:disabled { opacity: .5; cursor: wait; }
+
+  .rc { display: flex; gap: 12px; padding: 10px 0 10px 16px; border-left: 2px solid var(--line); margin-left: 8px; position: relative; }
+  .rc::before { content: ""; position: absolute; left: -6px; top: 16px; width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 2px solid var(--accent); }
+  .rc .ico { font-size: 15px; width: 22px; text-align: center; }
+  .rc .what b { font-size: 13px; display: block; }
+  .rc .what span { font-size: 12.5px; color: var(--dim); }
+  .rc .meta { margin-left: auto; text-align: right; flex-shrink: 0; }
+  .rc .ts { font-size: 11px; color: var(--dim); display: block; }
+  .rc .hash { font-family: ui-monospace, monospace; font-size: 10.5px; color: var(--dim); background: var(--soft); border-radius: 5px; padding: 1px 6px; cursor: pointer; }
+  .rc .hash:hover { color: var(--accent); }
+  .chainok { font-size: 12.5px; font-weight: 700; }
+  .chainok.y { color: var(--ok); } .chainok.n { color: var(--bad); }
+
+  .feed .rc::before { border-color: var(--violet); }
+  .feed .v { font-weight: 700; font-size: 12px; }
+  details { margin-top: 14px; }
+  summary { cursor: pointer; color: var(--dim); font-size: 13px; font-weight: 600; }
+  #report { white-space: pre-wrap; font-size: 13px; color: var(--dim); background: var(--soft); border-radius: 8px; padding: 12px; margin-top: 8px; max-height: 240px; overflow-y: auto; }
+
+  .toast { position: fixed; bottom: 22px; right: 22px; background: var(--ink); color: #fff; border-radius: 10px; padding: 13px 20px; font-size: 13.5px; display: none; max-width: 420px; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
+  .spin { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: r .8s linear infinite; vertical-align: -2px; }
   @keyframes r { to { transform: rotate(360deg); } }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <header>
-  <h1>REAPER</h1>
-  <span>the agent that finishes the cancellation chore — and checks the vendor obeyed</span>
-  <button class="danger" onclick="resetDemo()">reset demo</button>
+  <a class="mark" href="/" style="color:var(--ink)">REAPER</a>
+  <span class="sub">auto-renewals, finished</span>
+  <span class="right"><span class="dot"></span> agent online <span id="busy"></span></span>
 </header>
+
 <main>
   <section>
     <div class="panel">
-      <h2>Intake</h2>
-      <div id="drop">drop a contract here<br><small>PDF or text</small></div>
-      <input id="file" type="file" hidden>
+      <h2>Add a contract</h2>
+      <div id="drop"><b>Drop a contract</b><small>PDF or text — Reaper finds the renewal clause</small></div>
+      <input id="file" type="file" hidden aria-label="Upload a contract file">
     </div>
-    <div class="panel" style="margin-top:18px">
+    <div class="panel" style="margin-top:16px">
       <h2>Obligations</h2>
-      <div id="obs"><span class="dim">none yet</span></div>
+      <div id="obs"></div>
     </div>
   </section>
+
   <section>
-    <div class="panel" id="detail">
-      <h2>Obligation</h2>
-      <div id="detail-body"><span style="color:var(--dim)">select an obligation</span></div>
-    </div>
-    <div class="panel" style="margin-top:18px">
-      <h2>Agent report <span id="busy"></span></h2>
-      <div id="report">—</div>
+    <div class="panel" id="detail"></div>
+  </section>
+
+  <section>
+    <div class="panel feed">
+      <h2>Agent activity</h2>
+      <div id="feed"><span style="color:var(--dim);font-size:13px">quiet so far</span></div>
     </div>
   </section>
 </main>
 <div class="toast" id="toast"></div>
 
 <script>
-let obs = [], selId = null;
+const STEPS = ["Read", "Gate", "Sleep", "Approve", "Notice", "Verify"];
 
+const JOURNEY = {
+  BLOCKED:            { done: 1, active: -1, fail: 1 },
+  SCHEDULED:          { done: 2, active: 2, fail: -1 },
+  AWAITING_APPROVAL:  { done: 3, active: 3, fail: -1 },
+  NOTICE_SENT:        { done: 5, active: 5, fail: -1 },
+  VERIFIED:           { done: 6, active: -1, fail: -1 },
+  REFUTED:            { done: 5, active: -1, fail: 5 },
+  DISPUTED:           { done: 5, active: -1, fail: 5 },
+};
+
+const STORY = {
+  BLOCKED: ["⛔", "tone-red", "Scheduling blocked by the deterministic gate.",
+    "The engine could not independently confirm the deadline the model read. Nothing gets scheduled on an unverified date — this contract needs human review."],
+  SCHEDULED: ["😴", "tone-blue", "Asleep until the notice window.",
+    "The deadline is verified and on the calendar. No tokens are burning — the agent wakes by itself when it's time to act."],
+  AWAITING_APPROVAL: ["✋", "tone-amber", "Waiting for your approval.",
+    "The notice is drafted. This pause is durable — restart the server, redeploy, come back next week: the run resumes exactly here."],
+  NOTICE_SENT: ["📨", "tone-violet", "Notice delivered, receipt hash-stamped.",
+    "Now watching for the vendor's next invoice to verify they actually stopped billing."],
+  VERIFIED: ["✅", "tone-green", "Vendor honored the cancellation.",
+    "Billing verified stopped. The chore is finished — evidence chain on record."],
+  REFUTED: ["🚨", "tone-red", "The vendor billed anyway.",
+    "The deterministic check caught an unauthorized charge. Filing the dispute…"],
+  DISPUTED: ["⚖️", "tone-red", "Dispute filed — with receipts.",
+    "Reaper attached its own timestamped, hash-stamped delivery receipt as evidence that valid notice was given."],
+};
+
+const RECEIPT_INFO = {
+  EXTRACTED:          ["📄", "Clause extracted", "Gemini quoted the renewal clause verbatim from the contract"],
+  GATED:              ["🔍", "Deadline double-checked", "The deterministic engine independently re-derived the deadline"],
+  APPROVAL_REQUESTED: ["✋", "Approval requested", "Agent paused durably for a human decision"],
+  APPROVED:           ["👍", "Approved", "Human decision recorded: send the notice"],
+  REJECTED:           ["👎", "Rejected", "Human decision recorded: do not send"],
+  NOTICE_SENT:        ["📨", "Notice delivered", "Formal non-renewal notice sent; delivery receipt hash-stamped"],
+  INVOICE_CHECKED:    ["🧾", "Invoice read", "Next-cycle invoice retrieved for verification"],
+  VERIFIED:           ["✅", "Billing stopped", "Deterministic check: vendor honored the cancellation"],
+  REFUTED:            ["🚨", "Billed anyway", "Deterministic check caught an unauthorized renewal charge"],
+  DISPUTE_OPENED:     ["⚖️", "Dispute filed", "Dispute sent with the delivery receipt attached as evidence"],
+};
+
+let obs = [], selId = null, lastReport = null;
 const $ = id => document.getElementById(id);
-const toast = m => { const t = $("toast"); t.textContent = m; t.style.display = "block"; setTimeout(() => t.style.display = "none", 4000); };
+const toast = m => { const t = $("toast"); t.textContent = m; t.style.display = "block"; setTimeout(() => t.style.display = "none", 5000); };
 const busy = on => $("busy").innerHTML = on ? '<span class="spin"></span>' : "";
+const ago = ts => { const s = (Date.now() - new Date(ts + "Z")) / 1000; return s < 60 ? "just now" : s < 3600 ? `${s/60|0}m ago` : s < 86400 ? `${s/3600|0}h ago` : `${s/86400|0}d ago`; };
 
 async function refresh() {
   obs = await (await fetch("/obligations")).json();
-  $("obs").innerHTML = obs.length ? obs.map(o =>
-    `<div class="ob ${o.id===selId?"sel":""}" onclick="sel(${o.id})">
-       <span class="v">${o.vendor}</span>
-       <span class="pill s-${o.status}">${o.status.replace("_"," ")}</span>
-       <div style="font-size:12px;color:var(--dim)">notice by ${o.engine_deadline ?? "—"}</div>
-     </div>`).join("") : '<span style="color:var(--dim)">none yet</span>';
-  if (selId) renderDetail();
+  if (!selId && obs.length) selId = obs[0].id;
+  $("obs").innerHTML = obs.length ? obs.map(o => `
+    <div class="ob ${o.id===selId?"sel":""}" onclick="sel(${o.id})">
+      <span class="chip c-${o.status}">${o.status.replace(/_/g," ")}</span>
+      <div class="v">${o.vendor}</div>
+      <div class="d">notice by <b>${o.engine_deadline ?? "—"}</b></div>
+    </div>`).join("")
+    : '<div style="color:var(--dim);font-size:13px;padding:6px 0">Nothing yet — add a contract above.</div>';
+  renderDetail();
+  renderFeed();
 }
 
-function actionButtons(o) {
-  if (o.status === "SCHEDULED") return `<button class="primary" onclick="act('/obligations/${o.id}/notice-window','POST')">⏰ notice window opens</button>`;
+function journey(status) {
+  const j = JOURNEY[status] ?? { done: 0, active: -1, fail: -1 };
+  return `<div class="journey">${STEPS.map((s, i) => {
+    const n = i + 1;
+    let cls = "";
+    if (j.fail === n) cls = "fail";
+    else if (n <= j.done) cls = "done";
+    else if (j.active === n) cls = "active";
+    const mark = cls === "done" ? "✓" : cls === "fail" ? "✕" : n;
+    return `<div class="jstep ${cls}"><div class="ball">${mark}</div><div class="lbl">${s}</div></div>`;
+  }).join("")}</div>`;
+}
+
+function actions(o) {
+  if (o.status === "SCHEDULED") return `<button class="primary" onclick="act(this,'/obligations/${o.id}/notice-window','POST')">⏰ Simulate: the notice window opens</button>`;
   if (o.status === "AWAITING_APPROVAL") return `
-    <button class="primary" onclick="act('/obligations/${o.id}/approval','POST',{approve:true})">✅ approve notice</button>
-    <button onclick="act('/obligations/${o.id}/approval','POST',{approve:false})">reject</button>`;
-  if (o.status === "NOTICE_SENT") return `<button class="primary" onclick="act('/obligations/${o.id}/invoice-arrived','POST')">📨 next invoice arrives</button>`;
-  if (o.status === "BLOCKED") return `<span style="color:var(--bad);font-size:13px">⛔ scheduling blocked by the deterministic gate — human review required</span>`;
+    <button class="primary" onclick="act(this,'/obligations/${o.id}/approval','POST',{approve:true})">Approve &amp; send notice</button>
+    <button onclick="act(this,'/obligations/${o.id}/approval','POST',{approve:false})">Reject</button>`;
+  if (o.status === "NOTICE_SENT") return `<button class="primary" onclick="act(this,'/obligations/${o.id}/invoice-arrived','POST')">🧾 Simulate: next invoice arrives</button>`;
   return "";
 }
 
 async function renderDetail() {
-  const o = obs.find(x => x.id === selId); if (!o) return;
+  const el = $("detail");
+  const o = obs.find(x => x.id === selId);
+  if (!o) {
+    el.innerHTML = `<div class="empty">
+      <h3>Watch a contract take care of itself</h3>
+      <p>Drop any vendor agreement on the left. Reaper extracts the auto-renewal clause,
+      verifies the deadline twice, and runs the cancellation to a proven finish.</p>
+      <p style="font-size:12.5px">Sample contracts live in <b>data/contracts/</b> of the repo.</p>
+    </div>`;
+    return;
+  }
   const rc = await (await fetch(`/obligations/${o.id}/receipts`)).json();
-  $("detail-body").innerHTML = `
-    <div class="kv">
-      <span class="k">vendor</span><span>${o.vendor}</span>
-      <span class="k">clause</span><span style="font-size:12px">"${o.clause_text.slice(0,180)}…"</span>
-      <span class="k">term ends</span><span>${o.term_end}</span>
-      <span class="k">Gemini deadline</span><span class="gate">${o.llm_deadline ?? "—"}</span>
-      <span class="k">engine deadline</span><span class="gate">${o.engine_deadline ?? "—"}</span>
-      <span class="k">gate verdict</span><span class="gate ${o.gate_verdict}">${o.gate_verdict}</span>
-      <span class="k">evidence chain</span>
-      <span class="${rc.chain_intact ? "intact" : "broken"}">${rc.chain_intact ? "⛓ intact" : "⛓ BROKEN"} · ${rc.receipts.length} receipts</span>
+  const st = STORY[o.status] ?? ["•", "tone-blue", o.status, ""];
+  el.innerHTML = `
+    <h2>${o.vendor} · obligation #${o.id}</h2>
+    ${journey(o.status)}
+    <div class="story ${st[1]}"><span class="big">${st[0]}</span><div><b>${st[2]}</b><span>${st[3]}</span></div></div>
+    <div class="gatecard">
+      <div class="q">"${o.clause_text.slice(0, 200)}…" · term ends ${o.term_end}</div>
+      <div class="cmp">
+        <div class="gside"><span class="who">Gemini read</span><div class="val">${o.llm_deadline ?? "—"}</div></div>
+        <div class="gv ${o.gate_verdict}"><span class="eq">${o.gate_verdict === "MATCH" ? "=" : "≠"}</span><span class="t">${o.gate_verdict}</span></div>
+        <div class="gside"><span class="who">Engine derived</span><div class="val">${o.engine_deadline ?? "n/a"}</div></div>
+      </div>
     </div>
-    <div class="row">${actionButtons(o)}</div>
-    <h2 style="margin-top:14px">Receipt chain</h2>
-    <div id="chain">${rc.receipts.map(r => `
-      <div class="rc">
-        <span class="ts">${r.ts.slice(0,19).replace("T"," ")}</span>
-        <span class="kind">${r.kind}</span>
-        <span class="hash">${r.hash.slice(0,20)}…</span>
-      </div>`).join("")}</div>`;
+    <div class="row">${actions(o)}</div>
+    <h2 style="margin-top:18px">Evidence chain
+      <span class="chainok ${rc.chain_intact ? "y":"n"}" style="float:right">${rc.chain_intact ? "⛓ chain intact" : "⛓ CHAIN BROKEN"}</span>
+    </h2>
+    <div>${rc.receipts.map(r => {
+      const info = RECEIPT_INFO[r.kind] ?? ["•", r.kind, ""];
+      return `<div class="rc">
+        <span class="ico">${info[0]}</span>
+        <div class="what"><b>${info[1]}</b><span>${info[2]}</span></div>
+        <div class="meta"><span class="ts">${ago(r.ts)}</span>
+        <span class="hash" title="${r.hash}" onclick="navigator.clipboard.writeText('${r.hash}');toast('hash copied')">${r.hash.slice(0,14)}…</span></div>
+      </div>`;
+    }).join("")}</div>
+    ${lastReport ? `<details><summary>What the agent said</summary><div id="report">${lastReport}</div></details>` : ""}`;
+}
+
+async function renderFeed() {
+  const acts = await (await fetch("/activity")).json();
+  $("feed").innerHTML = acts.length ? acts.slice(0, 18).map(a => {
+    const info = RECEIPT_INFO[a.kind] ?? ["•", a.kind, ""];
+    return `<div class="rc"><span class="ico">${info[0]}</span>
+      <div class="what"><span class="v">${a.vendor}</span><b>${info[1]}</b><span>${info[2]}</span></div>
+      <div class="meta"><span class="ts">${ago(a.ts)}</span></div></div>`;
+  }).join("") : '<span style="color:var(--dim);font-size:13px">quiet so far</span>';
 }
 
 function sel(id) { selId = id; refresh(); }
 
-async function act(url, method, body) {
-  busy(true);
+async function act(btn, url, method, body) {
+  btn.disabled = true; busy(true);
   try {
-    const res = await fetch(url, { method, headers: {"Content-Type": "application/json"},
-                                   body: body ? JSON.stringify(body) : undefined });
+    const res = await fetch(url, { method, headers: {"Content-Type":"application/json"}, body: body ? JSON.stringify(body) : undefined });
     const d = await res.json();
-    $("report").textContent = d.report ?? d.detail ?? JSON.stringify(d);
+    lastReport = d.report ?? d.detail ?? null;
     if (d.degraded) toast("⚠ " + d.degraded);
   } catch (e) { toast("request failed: " + e); }
   busy(false); refresh();
@@ -155,20 +307,17 @@ $("file").onchange = () => upload($("file").files[0]);
 
 async function upload(f) {
   if (!f) return;
-  busy(true); $("report").textContent = "reading contract…";
+  busy(true); toast("Reading contract — Gemma triage first, then Gemini extraction…");
   const fd = new FormData(); fd.append("file", f);
   try {
     const d = await (await fetch("/contracts/upload", { method: "POST", body: fd })).json();
-    $("report").textContent = d.report ?? d.detail ?? "done";
-    if (d.triage) toast(`gemma triage (${d.triage.model}): renewal clause ${d.triage.has_renewal ? "found — " + (d.triage.section_hint || "") : "NOT found"}`);
+    lastReport = d.report ?? d.detail ?? null;
+    if (d.triage?.ok) toast(d.triage.has_renewal
+      ? `Gemma triage: renewal clause found ${d.triage.section_hint ? "(" + d.triage.section_hint + ")" : ""} — running full intake`
+      : "Gemma triage: no renewal clause in this document");
     if (d.obligations?.length) selId = d.obligations.at(-1).id;
   } catch (e) { toast("upload failed: " + e); }
   busy(false); refresh();
-}
-
-async function resetDemo() {
-  await fetch("/demo/reset", { method: "POST" });
-  selId = null; $("report").textContent = "—"; refresh(); toast("demo state wiped");
 }
 
 refresh(); setInterval(refresh, 5000);

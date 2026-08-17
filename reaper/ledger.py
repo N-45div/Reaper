@@ -141,6 +141,20 @@ def verify_chain(obligation_id: int) -> tuple[bool, str | None]:
     return True, None
 
 
+def recent_activity(limit: int = 40) -> list[dict]:
+    """All receipts across obligations, newest first, with vendor names."""
+    with _connect() as conn:
+        return [
+            dict(r)
+            for r in conn.execute(
+                "SELECT r.id, r.obligation_id, r.kind, r.ts, r.hash, o.vendor "
+                "FROM receipts r JOIN obligations o ON o.id = r.obligation_id "
+                "ORDER BY r.id DESC LIMIT ?",
+                (limit,),
+            )
+        ]
+
+
 def reset_all() -> None:
     """Demo reset: wipe all obligations, receipts and resume pointers."""
     with _connect() as conn:
