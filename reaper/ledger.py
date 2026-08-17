@@ -141,6 +141,14 @@ def verify_chain(obligation_id: int) -> tuple[bool, str | None]:
     return True, None
 
 
+def reset_all() -> None:
+    """Demo reset: wipe all obligations, receipts and resume pointers."""
+    with _connect() as conn:
+        conn.execute("DELETE FROM receipts")
+        conn.execute("DELETE FROM pending_resume")
+        conn.execute("DELETE FROM obligations")
+
+
 def save_resume_pointer(obligation_id: int, user_id: str, session_id: str,
                         invocation_id: str, function_call_id: str) -> None:
     with _connect() as conn:

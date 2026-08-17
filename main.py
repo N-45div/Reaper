@@ -8,16 +8,21 @@ freshly restarted process resume the exact paused invocation.
 import io
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.genai import types
 from pydantic import BaseModel
 
-from reaper import ledger
+from reaper import inbox, ledger
 from reaper.agent import app as adk_app
 from reaper.config import APP_NAME, DB_URL
+from reaper.triage import triage_contract
+
+STATIC_DIR = Path(__file__).parent / "reaper" / "static"
 
 USER_ID = "owner"
 runner: Runner | None = None
@@ -90,6 +95,18 @@ def _final_text(event) -> str | None:
     return "\n".join(texts) if texts else None
 
 
+@api.get("/")
+async def dashboard():
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@api.post("/demo/reset")
+async def demo_reset():
+    ledger.reset_all()
+    inbox.reset_world()
+    return {"ok": True}
+
+
 @api.post("/contracts/upload")
 async def upload_contract(file: UploadFile):
     raw = await file.read()
@@ -102,6 +119,15 @@ async def upload_contract(file: UploadFile):
     if not text.strip():
         raise HTTPException(422, "could not extract any text from the file")
 
+    # Gemma triage: skip the expensive agent run when there is no renewal
+    # clause at all. Fails open — triage never blocks a real contract.
+    triage = triage_contract(text)
+    if triage["ok"] and not triage["has_renewal"]:
+        return {"session_id": None, "triage": triage,
+                "report": "Triage: no auto-renewal clause found in this "
+                          f"document ({triage['model']}). Nothing to schedule.",
+                "obligations": ledger.list_obligations()}
+
     session_id = f"intake-{uuid.uuid4().hex[:8]}"
     result = await _run(
         session_id,
@@ -109,6 +135,7 @@ async def upload_contract(file: UploadFile):
              f"and gate-schedule it.\n\n--- CONTRACT ---\n{text}",
     )
     return {"session_id": session_id, "report": result["final_text"],
+            "triage": triage, "degraded": result["degraded"],
             "obligations": ledger.list_obligations()}
 
 

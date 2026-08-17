@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reaper</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #e6edf3;
+    --dim: #8b949e; --accent: #58a6ff; --ok: #3fb950; --warn: #d29922;
+    --bad: #f85149; --violet: #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
+  header { padding: 18px 28px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 14px; }
+  header h1 { font-size: 20px; letter-spacing: 3px; }
+  header span { color: var(--dim); font-size: 13px; }
+  header button { margin-left: auto; }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 18px; padding: 18px 28px; max-width: 1300px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: var(--dim); margin-bottom: 12px; }
+  #drop { border: 2px dashed var(--border); border-radius: 8px; padding: 22px; text-align: center; color: var(--dim); cursor: pointer; transition: .15s; }
+  #drop.hover, #drop:hover { border-color: var(--accent); color: var(--accent); }
+  .ob { padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; margin-top: 10px; cursor: pointer; }
+  .ob.sel { border-color: var(--accent); }
+  .ob .v { font-weight: 600; }
+  .pill { font-size: 11px; padding: 2px 9px; border-radius: 999px; border: 1px solid; float: right; }
+  .s-SCHEDULED { color: var(--accent); } .s-AWAITING_APPROVAL { color: var(--warn); }
+  .s-NOTICE_SENT { color: var(--violet); } .s-VERIFIED { color: var(--ok); }
+  .s-REFUTED, .s-BLOCKED { color: var(--bad); } .s-DISPUTED { color: var(--bad); }
+  button { background: #21262d; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: #1f6feb; border-color: #1f6feb; }
+  button.danger { background: transparent; border-color: var(--bad); color: var(--bad); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+  .kv { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; font-size: 13px; margin-bottom: 10px; }
+  .kv .k { color: var(--dim); }
+  .gate { font-family: ui-monospace, monospace; font-size: 13px; }
+  .gate.MATCH { color: var(--ok); } .gate.MISMATCH, .gate.AMBIGUOUS { color: var(--bad); }
+  #chain { margin-top: 8px; }
+  .rc { display: flex; gap: 12px; padding: 8px 0; border-left: 2px solid var(--border); padding-left: 14px; margin-left: 6px; position: relative; }
+  .rc::before { content: ""; position: absolute; left: -5px; top: 14px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .rc .kind { font-weight: 600; min-width: 170px; font-size: 13px; }
+  .rc .hash { font-family: ui-monospace, monospace; font-size: 11px; color: var(--dim); word-break: break-all; }
+  .rc .ts { color: var(--dim); font-size: 11px; min-width: 150px; }
+  #report { white-space: pre-wrap; font-size: 13px; color: var(--dim); max-height: 260px; overflow-y: auto; margin-top: 8px; }
+  .intact { color: var(--ok); } .broken { color: var(--bad); }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 12px 18px; font-size: 13px; display: none; }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--dim); border-top-color: var(--accent); border-radius: 50%; animation: r 0.8s linear infinite; vertical-align: -2px; }
+  @keyframes r { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>REAPER</h1>
+  <span>the agent that finishes the cancellation chore — and checks the vendor obeyed</span>
+  <button class="danger" onclick="resetDemo()">reset demo</button>
+</header>
+<main>
+  <section>
+    <div class="panel">
+      <h2>Intake</h2>
+      <div id="drop">drop a contract here<br><small>PDF or text</small></div>
+      <input id="file" type="file" hidden>
+    </div>
+    <div class="panel" style="margin-top:18px">
+      <h2>Obligations</h2>
+      <div id="obs"><span class="dim">none yet</span></div>
+    </div>
+  </section>
+  <section>
+    <div class="panel" id="detail">
+      <h2>Obligation</h2>
+      <div id="detail-body"><span style="color:var(--dim)">select an obligation</span></div>
+    </div>
+    <div class="panel" style="margin-top:18px">
+      <h2>Agent report <span id="busy"></span></h2>
+      <div id="report">—</div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+let obs = [], selId = null;
+
+const $ = id => document.getElementById(id);
+const toast = m => { const t = $("toast"); t.textContent = m; t.style.display = "block"; setTimeout(() => t.style.display = "none", 4000); };
+const busy = on => $("busy").innerHTML = on ? '<span class="spin"></span>' : "";
+
+async function refresh() {
+  obs = await (await fetch("/obligations")).json();
+  $("obs").innerHTML = obs.length ? obs.map(o =>
+    `<div class="ob ${o.id===selId?"sel":""}" onclick="sel(${o.id})">
+       <span class="v">${o.vendor}</span>
+       <span class="pill s-${o.status}">${o.status.replace("_"," ")}</span>
+       <div style="font-size:12px;color:var(--dim)">notice by ${o.engine_deadline ?? "—"}</div>
+     </div>`).join("") : '<span style="color:var(--dim)">none yet</span>';
+  if (selId) renderDetail();
+}
+
+function actionButtons(o) {
+  if (o.status === "SCHEDULED") return `<button class="primary" onclick="act('/obligations/${o.id}/notice-window','POST')">⏰ notice window opens</button>`;
+  if (o.status === "AWAITING_APPROVAL") return `
+    <button class="primary" onclick="act('/obligations/${o.id}/approval','POST',{approve:true})">✅ approve notice</button>
+    <button onclick="act('/obligations/${o.id}/approval','POST',{approve:false})">reject</button>`;
+  if (o.status === "NOTICE_SENT") return `<button class="primary" onclick="act('/obligations/${o.id}/invoice-arrived','POST')">📨 next invoice arrives</button>`;
+  if (o.status === "BLOCKED") return `<span style="color:var(--bad);font-size:13px">⛔ scheduling blocked by the deterministic gate — human review required</span>`;
+  return "";
+}
+
+async function renderDetail() {
+  const o = obs.find(x => x.id === selId); if (!o) return;
+  const rc = await (await fetch(`/obligations/${o.id}/receipts`)).json();
+  $("detail-body").innerHTML = `
+    <div class="kv">
+      <span class="k">vendor</span><span>${o.vendor}</span>
+      <span class="k">clause</span><span style="font-size:12px">"${o.clause_text.slice(0,180)}…"</span>
+      <span class="k">term ends</span><span>${o.term_end}</span>
+      <span class="k">Gemini deadline</span><span class="gate">${o.llm_deadline ?? "—"}</span>
+      <span class="k">engine deadline</span><span class="gate">${o.engine_deadline ?? "—"}</span>
+      <span class="k">gate verdict</span><span class="gate ${o.gate_verdict}">${o.gate_verdict}</span>
+      <span class="k">evidence chain</span>
+      <span class="${rc.chain_intact ? "intact" : "broken"}">${rc.chain_intact ? "⛓ intact" : "⛓ BROKEN"} · ${rc.receipts.length} receipts</span>
+    </div>
+    <div class="row">${actionButtons(o)}</div>
+    <h2 style="margin-top:14px">Receipt chain</h2>
+    <div id="chain">${rc.receipts.map(r => `
+      <div class="rc">
+        <span class="ts">${r.ts.slice(0,19).replace("T"," ")}</span>
+        <span class="kind">${r.kind}</span>
+        <span class="hash">${r.hash.slice(0,20)}…</span>
+      </div>`).join("")}</div>`;
+}
+
+function sel(id) { selId = id; refresh(); }
+
+async function act(url, method, body) {
+  busy(true);
+  try {
+    const res = await fetch(url, { method, headers: {"Content-Type": "application/json"},
+                                   body: body ? JSON.stringify(body) : undefined });
+    const d = await res.json();
+    $("report").textContent = d.report ?? d.detail ?? JSON.stringify(d);
+    if (d.degraded) toast("⚠ " + d.degraded);
+  } catch (e) { toast("request failed: " + e); }
+  busy(false); refresh();
+}
+
+$("drop").onclick = () => $("file").click();
+$("drop").ondragover = e => { e.preventDefault(); $("drop").classList.add("hover"); };
+$("drop").ondragleave = () => $("drop").classList.remove("hover");
+$("drop").ondrop = e => { e.preventDefault(); $("drop").classList.remove("hover"); upload(e.dataTransfer.files[0]); };
+$("file").onchange = () => upload($("file").files[0]);
+
+async function upload(f) {
+  if (!f) return;
+  busy(true); $("report").textContent = "reading contract…";
+  const fd = new FormData(); fd.append("file", f);
+  try {
+    const d = await (await fetch("/contracts/upload", { method: "POST", body: fd })).json();
+    $("report").textContent = d.report ?? d.detail ?? "done";
+    if (d.triage) toast(`gemma triage (${d.triage.model}): renewal clause ${d.triage.has_renewal ? "found — " + (d.triage.section_hint || "") : "NOT found"}`);
+    if (d.obligations?.length) selId = d.obligations.at(-1).id;
+  } catch (e) { toast("upload failed: " + e); }
+  busy(false); refresh();
+}
+
+async function resetDemo() {
+  await fetch("/demo/reset", { method: "POST" });
+  selId = null; $("report").textContent = "—"; refresh(); toast("demo state wiped");
+}
+
+refresh(); setInterval(refresh, 5000);
+</script>
+</body>
+</html>

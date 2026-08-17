@@ -54,6 +54,13 @@ def seed_next_invoice(vendor: str, notice_was_valid: bool) -> dict:
     return invoice
 
 
+def reset_world() -> None:
+    """Demo reset: clear delivered notices and seeded invoices."""
+    import shutil
+    for d in (OUTBOX, INVOICES):
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def read_next_invoice(vendor: str) -> dict | None:
     path = INVOICES / f"invoice-{vendor.replace(' ', '_')}.json"
     if not path.exists():
