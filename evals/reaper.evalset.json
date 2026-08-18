@@ -1,0 +1,140 @@
+{
+  "eval_set_id": "reaper_exam",
+  "name": "Reaper gate exam",
+  "description": "Proves the deterministic gate schedules clean clauses and blocks unverifiable ones.",
+  "eval_cases": [
+    {
+      "eval_id": "clean_clause_is_scheduled",
+      "conversation": [
+        {
+          "invocation_id": "clean_clause_is_scheduled-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "INTAKE. Extract the auto-renewal obligation from this contract and gate-schedule it.\n\n--- CONTRACT ---\nMASTER SUBSCRIPTION AGREEMENT\n\nThis Master Subscription Agreement (\"Agreement\") is entered into between\nCloudCo Metrics (\"Provider\") and Meridian Retail LLP (\"Customer\").\n\n1. SERVICES. Provider will supply the CloudCo Metrics analytics platform,\nProfessional tier, at a subscription fee of $299.00 per month, invoiced monthly.\n\n2. TERM. The Initial Term of this Agreement begins on January 1, 2026 and ends\non December 31, 2026.\n\n3. RENEWAL. This Agreement shall automatically renew for successive twelve (12)\nmonth terms unless either party provides written notice of non-renewal at least\nsixty (60) days prior to the end of the then-current term. Notice of\nnon-renewal must be delivered in writing to cancellations@cloudcometrics.test.\n\n4. FEES ON RENEWAL. Provider may increase subscription fees by up to seven\npercent (7%) upon each renewal.\n\n5. GOVERNING LAW. This Agreement is governed by the laws of the State of\nDelaware.\n",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null,
+                "tool_call": null,
+                "tool_response": null,
+                "part_metadata": null,
+                "audio_transcription": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "I have processed the contract intake and scheduled the auto-renewal obligation.\n\n### Auto-Renewal Clause Verbatim\n> \"This Agreement shall automatically renew for successive twelve (12) month terms unless either party provides written notice of non-renewal at least sixty (60) days prior to the end of the then-current term. Notice of non-renewal must be delivered in writing to cancellations@cloudcometrics.test.\"\n\n### Extracted Metadata\n* **Vendor:** CloudCo Metrics\n* **Current Term End Date:** December 31, 2026\n* **Notice Deadline:** November 1, 2026 (60 days prior to term end)\n* **Recipient:** cancellations@cloudcometrics.test\n\nThe deterministic engine verified the notice deadline matches, and the obligation has been scheduled.\n**Status:** SCHEDULED | **Next Step:** Monitor for the notice window.",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null,
+                "tool_call": null,
+                "tool_response": null,
+                "part_metadata": null,
+                "audio_transcription": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": null,
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": {
+        "app_name": "reaper",
+        "user_id": "examiner",
+        "session_id": null,
+        "state": {}
+      },
+      "creation_timestamp": 1787080529.2435887,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "conflicting_clause_is_blocked",
+      "conversation": [
+        {
+          "invocation_id": "conflicting_clause_is_blocked-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "INTAKE. Extract the auto-renewal obligation from this contract and gate-schedule it.\n\n--- CONTRACT ---\nHOSTING AGREEMENT\n\nThis Hosting Agreement is made between HostWave Systems (\"Host\") and\nMeridian Retail LLP (\"Subscriber\").\n\n1. SERVICE. Host provides dedicated hosting, Fleet plan, at $180.00 per month.\n\n2. TERM. The term of this Agreement runs from June 1, 2026 through May 31, 2027.\n\n3. RENEWAL AND TERMINATION. This Agreement renews automatically for additional\none-year terms. Subscriber may opt out of renewal by providing written notice\nno later than sixty (90) days prior to the end of the then-current term, sent\nto support@hostwave.test.\n\n[Note: the written word and the numeral in clause 3 disagree — this contract\nexists to demonstrate the deterministic gate blocking an unverifiable deadline.]\n",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null,
+                "tool_call": null,
+                "tool_response": null,
+                "part_metadata": null,
+                "audio_transcription": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "### Intake Analysis\n\n1. **Auto-Renewal Clause (Verbatim)**:\n> \"This Agreement renews automatically for additional one-year terms. Subscriber may opt out of renewal by providing written notice no later than sixty (90) days prior to the end of the then-current term, sent to support@hostwave.test.\"\n\n2. **Extracted Metadata**:\n* **Vendor**: HostWave Systems\n* **Recipient**: support@hostwave.test\n\n### Gate & Schedule Result\n\nThe gate returned an **AMBIGUOUS** verdict.\n* **Gate Verdict**: AMBIGUOUS\n* **Engine Reason**: Conflicting written and numeric values in 'sixty (90) days'.\n* **Status**: BLOCKED\n\n**Recommendation**: The contract contains a direct contradiction between the written word and the numeral; scheduling is blocked and human review is required. No notice was scheduled on an unverified date.",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null,
+                "tool_call": null,
+                "tool_response": null,
+                "part_metadata": null,
+                "audio_transcription": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": null,
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": {
+        "app_name": "reaper",
+        "user_id": "examiner",
+        "session_id": null,
+        "state": {}
+      },
+      "creation_timestamp": 1787080529.2446063,
+      "rubrics": null,
+      "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 1787080529.2446063
+}
