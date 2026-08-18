@@ -49,6 +49,10 @@ CREATE TABLE IF NOT EXISTS pending_resume (
     function_call_id TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
 
 GENESIS = "0" * 64
@@ -141,6 +145,17 @@ def verify_chain(obligation_id: int) -> tuple[bool, str | None]:
     return True, None
 
 
+def get_meta(key: str) -> str | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else None
+
+
+def set_meta(key: str, value: str) -> None:
+    with _connect() as conn:
+        conn.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, value))
+
+
 def recent_activity(limit: int = 40) -> list[dict]:
     """All receipts across obligations, newest first, with vendor names."""
     with _connect() as conn:
@@ -161,6 +176,7 @@ def reset_all() -> None:
         conn.execute("DELETE FROM receipts")
         conn.execute("DELETE FROM pending_resume")
         conn.execute("DELETE FROM obligations")
+        conn.execute("DELETE FROM meta")
 
 
 def save_resume_pointer(obligation_id: int, user_id: str, session_id: str,
