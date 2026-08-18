@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import reaper.ledger as ledger
+import reaper.ledger_sqlite as ledger
 
 
 def _fresh(tmp_path, monkeypatch):

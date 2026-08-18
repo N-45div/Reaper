@@ -6,3 +6,4 @@ aiosqlite>=0.20.0
 sqlalchemy>=2.0.0
 python-dateutil>=2.9.0
 pypdf>=4.0.0
+google-cloud-firestore>=2.16.0
