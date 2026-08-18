@@ -139,6 +139,7 @@
       <span>ledger date <b id="clock">—</b></span>
       <button class="mini" onclick="passTime()" title="Advance the calendar to the next event — the agent acts on its own">let time pass ▸</button>
       <button class="mini kill" onclick="chaosKill()" title="Kill the process mid-flight — durable state survives">kill the agent</button>
+      <a class="mini" style="text-decoration:none" href="/calendar.ics" title="Subscribe to obligation deadlines from any calendar app">calendar ↧</a>
       <span>on watch <b id="n-watch">0</b></span><span>disputed <b id="n-disp">0</b></span><span id="busy"></span>
     </span>
   </div>
@@ -284,6 +285,12 @@ function actionRow(o) {
   return "";
 }
 
+function packLink(o) {
+  if (["NOTICE_SENT", "VERIFIED", "REFUTED", "DISPUTED"].includes(o.status))
+    return `<a class="mini" style="text-decoration:none" target="_blank" href="/obligations/${o.id}/pack" title="Printable chain-of-custody document">evidence pack ↗</a>`;
+  return "";
+}
+
 async function renderDetail() {
   const el = $("detail");
   const o = obs.find(x => x.id === selId);
@@ -315,7 +322,7 @@ async function renderDetail() {
       </div>
       <div class="verdict-row"><span class="vmark ${o.gate_verdict}">${o.gate_verdict}</span><span class="why">${gateWhy}</span></div>
     </div>
-    <div class="actions">${actionRow(o)}</div>
+    <div class="actions">${actionRow(o)} ${packLink(o)}</div>
     <div class="bh" style="border-top:1px solid var(--hair)">Evidence chain
       <span class="chainline ${rc.chain_intact ? "y":"n"}">${rc.chain_intact ? "chain intact · sha-256" : "CHAIN BROKEN"}</span></div>
     <div class="bb" style="padding-top:6px">

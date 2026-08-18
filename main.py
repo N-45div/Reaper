@@ -199,6 +199,86 @@ async def activity():
     return ledger.recent_activity()
 
 
+@api.get("/obligations/{obligation_id}/pack")
+async def evidence_pack(obligation_id: int):
+    """The printable evidence pack: obligation, clause, gate, full chain."""
+    ob = ledger.get_obligation(obligation_id)
+    if ob is None:
+        raise HTTPException(404, "unknown obligation")
+    receipts = ledger.get_receipts(obligation_id)
+    intact, broken = ledger.verify_chain(obligation_id)
+    import json as _json
+    from fastapi.responses import HTMLResponse
+
+    rows = ""
+    for i, r in enumerate(receipts, 1):
+        payload = _json.dumps(_json.loads(r["payload"]), indent=0)[1:-1].replace('"', "")
+        rows += (f"<tr><td class='no'>{i}</td><td class='k'>{r['kind']}</td>"
+                 f"<td class='p'>{payload[:400]}</td><td class='t'>{r['ts'][:19]}Z</td>"
+                 f"<td class='h'>{r['hash']}</td></tr>")
+    verdict_line = ("CHAIN VERIFIED INTACT — every hash recomputed from the genesis record"
+                    if intact else f"CHAIN BROKEN AT {broken}")
+    html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'>
+<title>Evidence pack — obligation {obligation_id}</title><style>
+  body {{ font: 13px/1.55 Georgia, serif; color: #191917; margin: 48px auto; max-width: 900px; padding: 0 24px; }}
+  .rule {{ border-top: 6px solid #191917; margin-bottom: 8px; }}
+  h1 {{ font-size: 24px; font-weight: 600; }} .mono {{ font-family: Consolas, monospace; }}
+  .sub {{ color: #6e6b63; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }}
+  .box {{ border: 1px solid #c9c5ba; padding: 14px 18px; margin: 18px 0; }}
+  .clause {{ font-style: italic; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 10px; }}
+  th {{ text-align: left; border-bottom: 2px solid #191917; padding: 6px; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; }}
+  td {{ border-bottom: 1px solid #e4e2da; padding: 6px; vertical-align: top; }}
+  td.h {{ font-family: Consolas, monospace; font-size: 9px; word-break: break-all; color: #6e6b63; }}
+  td.no {{ color: #6e6b63; }} td.k {{ font-weight: 700; white-space: nowrap; }}
+  td.p {{ color: #444; }} td.t {{ font-family: Consolas, monospace; font-size: 10px; white-space: nowrap; }}
+  .verdict {{ font-weight: 700; letter-spacing: 1px; margin: 16px 0; }}
+  .ok {{ color: #1e5c3a; }} .bad {{ color: #8c2318; }}
+  @media print {{ .noprint {{ display: none; }} }}
+</style></head><body>
+<div class='rule'></div>
+<div class='sub'>Reaper — evidence pack · generated {clock.today().isoformat()}</div>
+<h1>{ob['vendor']} — obligation №{str(obligation_id).zfill(4)}</h1>
+<div class='box'>
+  <div class='sub'>Renewal clause, verbatim</div>
+  <p class='clause'>“{ob['clause_text']}”</p>
+  <p>Term ends <b>{ob['term_end']}</b> · model read <b class='mono'>{ob['llm_deadline']}</b> ·
+  engine derived <b class='mono'>{ob['engine_deadline']}</b> · gate verdict <b>{ob['gate_verdict']}</b> ·
+  notice to <span class='mono'>{ob['recipient']}</span> · status <b>{ob['status']}</b></p>
+</div>
+<div class='sub'>Chain of custody — {len(receipts)} records</div>
+<table><tr><th>№</th><th>Record</th><th>Payload</th><th>Time (UTC)</th><th>SHA-256</th></tr>{rows}</table>
+<p class='verdict {"ok" if intact else "bad"}'>{verdict_line}</p>
+<p class='sub noprint'>print this page to PDF to attach it to a dispute</p>
+</body></html>"""
+    return HTMLResponse(html)
+
+
+@api.get("/calendar.ics")
+async def calendar_feed():
+    """Obligation deadlines as an iCalendar feed — subscribe from any calendar."""
+    from fastapi.responses import Response
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Reaper//obligations//EN",
+             "X-WR-CALNAME:Reaper obligations"]
+    for ob in ledger.list_obligations():
+        oid = ob["id"]
+        if ob.get("engine_deadline"):
+            d = ob["engine_deadline"].replace("-", "")
+            lines += ["BEGIN:VEVENT", f"UID:reaper-{oid}-notice@reaper",
+                      f"DTSTART;VALUE=DATE:{d}",
+                      f"SUMMARY:Notice deadline — {ob['vendor']} (Reaper)",
+                      f"DESCRIPTION:Non-renewal notice must be delivered by this date. Status: {ob['status']}",
+                      "END:VEVENT"]
+        if ob.get("term_end"):
+            d = ob["term_end"].replace("-", "")
+            lines += ["BEGIN:VEVENT", f"UID:reaper-{oid}-term@reaper",
+                      f"DTSTART;VALUE=DATE:{d}",
+                      f"SUMMARY:Term ends — {ob['vendor']} (Reaper)",
+                      "END:VEVENT"]
+    lines.append("END:VCALENDAR")
+    return Response("\r\n".join(lines), media_type="text/calendar")
+
+
 async def _open_notice_window(obligation_id: int) -> dict:
     ob = ledger.get_obligation(obligation_id)
     session_id = f"ob-{obligation_id}"
