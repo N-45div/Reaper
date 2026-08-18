@@ -32,8 +32,12 @@ next invoice ──► VERIFY      deterministic check: billed vs expected
 
 Built on **google-adk 2.6.3** (single resumable `LlmAgent`,
 `LongRunningFunctionTool` + `ResumabilityConfig` + `DatabaseSessionService`),
-**Gemini 3.5 Flash**, FastAPI, and Google Cloud (Cloud Run + Cloud SQL +
-Cloud Scheduler/PubSub wakes).
+**Gemini 3.5 Flash** with a **Gemma 4** triage filter, FastAPI, and Google
+Cloud: the evidence chain lives in **Firestore** (hash-chained receipts,
+activity register, clock state), with Pub/Sub as the production wake path —
+all on the no-billing free tier.
+
+![Architecture](docs/architecture.svg)
 
 ## Run it locally
 
@@ -68,8 +72,15 @@ Upload `data/contracts/datavault-pro-services.txt` for the villain path (vendor
 bills anyway → autonomous dispute), and `ambiguous-hostwave.txt` to watch the
 deterministic gate block a clause whose written words and numerals disagree.
 
-## Tests
+## Tests & the eval exam
 
 ```bash
-.venv/Scripts/python -m pytest tests -q
+.venv/Scripts/python -m pytest tests -q          # 14 deterministic unit tests
+.venv/Scripts/python scripts/make_evalset.py     # regenerate the ADK eval set
+REAPER_LEDGER=sqlite .venv/Scripts/adk eval reaper evals/reaper.evalset.json --config_file_path evals/eval_config.json
 ```
+
+The eval exam runs the live agent against two contracts and scores it with a
+deterministic ROUGE metric (no LLM judge — fitting, for a product whose thesis
+is "don't trust the model's own reading"): the clean clause must be gated
+MATCH and scheduled; the planted words-vs-numerals trap must come back BLOCKED.
