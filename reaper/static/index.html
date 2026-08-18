@@ -21,8 +21,12 @@
   header .bar { max-width: 1380px; margin: 0 auto; padding: 16px 28px; display: flex; align-items: baseline; gap: 18px; }
   .mark { font-family: var(--serif); font-size: 19px; font-weight: 700; }
   header .sub { color: var(--muted); font-size: 13px; letter-spacing: 2px; text-transform: uppercase; }
-  header .right { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); display: flex; gap: 18px; }
+  header .right { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); display: flex; gap: 16px; align-items: center; }
   header .right b { color: var(--ink); }
+  button.mini { font: 600 11.5px var(--sans); letter-spacing: .6px; padding: 6px 12px; background: var(--card); border: 1px solid var(--ink); color: var(--ink); cursor: pointer; }
+  button.mini:hover { background: var(--ink-soft); }
+  button.mini.kill { border-color: var(--wax); color: var(--wax); }
+  button.mini.kill:hover { background: var(--wax-soft); }
 
   main { display: grid; grid-template-columns: 320px minmax(0,1fr) 296px; gap: 22px; padding: 24px 28px; max-width: 1380px; margin: 0 auto; }
   .box { background: var(--card); border: 1px solid var(--hair); }
@@ -131,7 +135,12 @@
   <div class="bar">
     <a class="mark" href="/">Reaper</a>
     <span class="sub">Obligations ledger</span>
-    <span class="right"><span>on watch <b id="n-watch">0</b></span><span>disputed <b id="n-disp">0</b></span><span id="busy"></span></span>
+    <span class="right">
+      <span>ledger date <b id="clock">—</b></span>
+      <button class="mini" onclick="passTime()" title="Advance the calendar to the next event — the agent acts on its own">let time pass ▸</button>
+      <button class="mini kill" onclick="chaosKill()" title="Kill the process mid-flight — durable state survives">kill the agent</button>
+      <span>on watch <b id="n-watch">0</b></span><span>disputed <b id="n-disp">0</b></span><span id="busy"></span>
+    </span>
   </div>
 </header>
 
@@ -193,6 +202,7 @@ const NARR = {
   DISPUTED: ["Dispute served — with receipts.", "Filed autonomously, attaching the timestamped delivery receipt as evidence that valid notice was given."],
 };
 const ENTRY = {
+  WOKE:               ["Agent woke", "the calendar reached an event — no human trigger", ""],
   EXTRACTED:          ["Clause extracted", "Gemini quoted the renewal clause verbatim", ""],
   GATED:              ["Deadline gated", "engine re-derived the deadline independently", ""],
   APPROVAL_REQUESTED: ["Signature requested", "run paused durably for a human decision", ""],
@@ -210,6 +220,35 @@ const $ = id => document.getElementById(id);
 const toast = m => { const t = $("toast"); t.textContent = m; t.style.display = "block"; setTimeout(() => t.style.display = "none", 5200); };
 const busy = on => $("busy").innerHTML = on ? '<span class="spin"></span>' : "";
 const ago = ts => { const s = (Date.now() - new Date(ts + "Z")) / 1000; return s < 60 ? "now" : s < 3600 ? `${s/60|0}m` : s < 86400 ? `${s/3600|0}h` : `${s/86400|0}d`; };
+
+async function refreshClock() {
+  try {
+    const c = await (await fetch("/clock")).json();
+    $("clock").textContent = c.ledger_date + (c.offset_days ? ` (+${c.offset_days}d)` : "");
+  } catch (e) { /* server mid-restart */ }
+}
+
+async function passTime() {
+  const d = await (await fetch("/clock/advance", { method: "POST", headers: {"Content-Type":"application/json"}, body: "{}" })).json();
+  toast(`The calendar advanced ${d.advanced_days} day${d.advanced_days === 1 ? "" : "s"} to ${d.ledger_date}. Watch the register — the agent acts on its own.`);
+  refreshClock();
+}
+
+async function chaosKill() {
+  toast("Killing the agent process mid-flight…");
+  try { await fetch("/chaos/kill", { method: "POST" }); } catch (e) { /* it died mid-response, as intended */ }
+  const t0 = Date.now();
+  const wait = setInterval(async () => {
+    try {
+      const r = await fetch("/healthz");
+      if (r.ok) {
+        clearInterval(wait);
+        toast(`Resurrected after ${((Date.now() - t0) / 1000).toFixed(1)}s — ledger, clock and any paused approval intact.`);
+        refresh(); refreshClock();
+      }
+    } catch (e) { /* still down */ }
+  }, 700);
+}
 
 async function refresh() {
   obs = await (await fetch("/obligations")).json();
@@ -237,11 +276,11 @@ function acts(status) {
 }
 
 function actionRow(o) {
-  if (o.status === "SCHEDULED") return `<button class="solid" onclick="act(this,'/obligations/${o.id}/notice-window','POST')">Advance to the notice window</button><span class="hint">in production this wake is a Cloud Scheduler event</span>`;
+  if (o.status === "SCHEDULED") return `<span class="hint">No action for you here. Let time pass — the agent wakes itself inside the notice window (by ${o.engine_deadline}).</span>`;
   if (o.status === "AWAITING_APPROVAL") return `
     <button class="solid" onclick="act(this,'/obligations/${o.id}/approval','POST',{approve:true})">Sign — send the notice</button>
     <button onclick="act(this,'/obligations/${o.id}/approval','POST',{approve:false})">Decline</button>`;
-  if (o.status === "NOTICE_SENT") return `<button class="solid" onclick="act(this,'/obligations/${o.id}/invoice-arrived','POST')">The next invoice arrives</button><span class="hint">deterministic check: billed vs expected</span>`;
+  if (o.status === "NOTICE_SENT") return `<span class="hint">Watching. When the term ends (${o.term_end}) the next invoice arrives and the agent verifies it unprompted.</span>`;
   return "";
 }
 
@@ -336,7 +375,8 @@ async function upload(f) {
   busy(false); refresh();
 }
 
-refresh(); setInterval(refresh, 5000);
+refresh(); refreshClock();
+setInterval(refresh, 5000); setInterval(refreshClock, 5000);
 </script>
 </body>
 </html>
