@@ -405,9 +405,14 @@ async def deliver_approval(obligation_id: int, decision: Decision):
         ptr = ledger.get_resume_pointer(obligation_id)
     if ptr is None:
         raise HTTPException(409, "no pending approval for this obligation")
-    ledger.append_receipt(
-        obligation_id, "APPROVED" if decision.approve else "REJECTED", {}
-    )
+    # The decision is recorded once, even if delivering it takes several
+    # attempts: an evidence chain with two APPROVED entries for one signature
+    # is a defect, not a detail.
+    kind = "APPROVED" if decision.approve else "REJECTED"
+    already = any(r["kind"] in ("APPROVED", "REJECTED")
+                  for r in ledger.get_receipts(obligation_id))
+    if not already:
+        ledger.append_receipt(obligation_id, kind, {})
     response_part = types.Part(
         function_response=types.FunctionResponse(
             id=ptr["function_call_id"],
