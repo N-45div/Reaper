@@ -12,10 +12,9 @@ from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
-from google import genai
 from google.genai import types
 
-from . import clock, ledger
+from . import clock, ledger, llm
 from .config import MODEL
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -153,13 +152,12 @@ def gather() -> dict:
 
 def narrate(facts: dict) -> dict:
     try:
-        client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
-        resp = client.models.generate_content(
+        resp = llm.call(lambda c: c.models.generate_content(
             model=MODEL,
             contents=PROMPT % json.dumps(facts, indent=2),
             config=types.GenerateContentConfig(
                 response_mime_type="application/json", response_schema=SCHEMA),
-        )
+        ))
         return json.loads(resp.text)
     except Exception as exc:
         return {

@@ -20,7 +20,7 @@ from google.adk.sessions import DatabaseSessionService
 from google.genai import types
 from pydantic import BaseModel
 
-from reaper import clock, inbox, ledger, vision
+from reaper import clock, inbox, ledger, llm, vision
 from reaper.agent import app as adk_app
 from reaper.config import APP_NAME, DB_URL
 from reaper.triage import triage_contract
@@ -110,6 +110,8 @@ async def _run(session_id: str, *, text: str | None = None,
             pending = _pending_approval(event) or pending
             final_text = _final_text(event) or final_text
     except Exception as exc:  # model quota/transient errors mid-run
+        if llm.is_quota_error(exc):
+            llm.rotate()  # next run tries the other project's quota
         # Tool effects already committed are in the ledger; the session is in
         # SQL. Nothing is lost — report the ledger truth instead of a 500.
         degraded = (
@@ -196,7 +198,8 @@ def _read_contract(filename: str, raw: bytes, content_type: str) -> tuple[str, d
         mime = content_type if content_type.startswith("image/") else "image/jpeg"
         seen = vision.transcribe_contract_image(raw, mime)
         return seen["text"], {"how": "gemini-vision", "detail": "read from a photograph",
-                              "model": seen["model"], "illegible": seen.get("illegible", False)}
+                              "model": seen["model"], "illegible": seen.get("illegible", False),
+                              "error": seen.get("error")}
 
     if name.endswith(".pdf"):
         from pypdf import PdfReader
@@ -210,7 +213,8 @@ def _read_contract(filename: str, raw: bytes, content_type: str) -> tuple[str, d
         seen = vision.transcribe_contract_image(raw, "application/pdf")
         return seen["text"], {"how": "gemini-vision",
                               "detail": "scanned PDF with no text layer, read by Gemini",
-                              "model": seen["model"], "illegible": seen.get("illegible", False)}
+                              "model": seen["model"], "illegible": seen.get("illegible", False),
+                              "error": seen.get("error")}
 
     return raw.decode("utf-8", errors="replace"), {"how": "plain-text", "detail": "read as text"}
 
@@ -220,9 +224,18 @@ async def upload_contract(file: UploadFile):
     raw = await file.read()
     text, source = _read_contract(file.filename or "", raw, file.content_type or "")
     if not text.strip():
-        raise HTTPException(422, "could not read any contract text from that file")
+        why = source.get("error") or f"nothing readable via {source['how']}"
+        raise HTTPException(422, f"could not read any contract text from that file: {why}")
+    before = {o["id"] for o in ledger.list_obligations()}
     result = await _intake(text)
     result["source"] = source
+
+    # Provenance of the reading itself belongs in the evidence chain: a clause
+    # transcribed off a photograph and one parsed from a text layer carry
+    # different weight if this ever has to be defended.
+    for ob in ledger.list_obligations():
+        if ob["id"] not in before:
+            ledger.append_receipt(ob["id"], "READ_AS", source)
     return result
 
 

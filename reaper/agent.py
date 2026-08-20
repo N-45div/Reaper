@@ -6,11 +6,26 @@ The multi-step feel comes from the tool chain, not an agent tree.
 """
 
 from google.adk.agents import LlmAgent
+from google.adk.models.google_llm import Gemini
 from google.adk.apps import App, ResumabilityConfig
 from google.adk.tools import LongRunningFunctionTool
 
+from . import llm
 from .config import APP_NAME, MODEL
 from . import tools
+
+class RotatingGemini(Gemini):
+    """Gemini bound to whichever API key is currently healthy.
+
+    ADK caches its client by default; this agent runs unattended for weeks, so
+    it re-reads the key on every call and can therefore be moved to a second
+    project's quota mid-flight without a restart.
+    """
+
+    @property
+    def api_client(self):
+        return llm.client()
+
 
 INSTRUCTION = """
 You are Reaper, an autonomous contract-renewal obligation agent. You finish the
@@ -48,7 +63,7 @@ Always finish with a compact status line: obligation id, status, and next step.
 
 root_agent = LlmAgent(
     name="reaper",
-    model=MODEL,
+    model=RotatingGemini(model=MODEL),
     description="Autonomous contract-renewal obligation agent",
     instruction=INSTRUCTION,
     tools=[

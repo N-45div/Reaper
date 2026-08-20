@@ -8,8 +8,8 @@ if Gemma is unavailable the document proceeds to full intake.
 
 import json
 
-from google import genai
 
+from . import llm
 from .config import TRIAGE_MODEL
 
 _PROMPT = """You are a fast contract triage filter. Answer strictly with JSON:
@@ -24,11 +24,10 @@ renews the agreement unless notice is given)?
 
 def triage_contract(text: str) -> dict:
     try:
-        client = genai.Client()
-        resp = client.models.generate_content(
+        resp = llm.call(lambda c: c.models.generate_content(
             model=TRIAGE_MODEL,
             contents=_PROMPT + text[:8000],
-        )
+        ), attempts=2)
         raw = resp.text.strip()
         raw = raw[raw.find("{"): raw.rfind("}") + 1]
         data = json.loads(raw)

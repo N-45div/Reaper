@@ -12,9 +12,9 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from google import genai
 from google.genai import types
 
+from . import llm
 from .config import MODEL
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -36,14 +36,13 @@ Output the transcription only."""
 def transcribe_contract_image(data: bytes, mime_type: str) -> dict:
     """Return {"text": ..., "ok": bool, "model": ...} for an image or PDF."""
     try:
-        client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
-        resp = client.models.generate_content(
+        resp = llm.call(lambda c: c.models.generate_content(
             model=MODEL,
             contents=[
                 types.Part.from_bytes(data=data, mime_type=mime_type),
                 types.Part(text=PROMPT),
             ],
-        )
+        ))
         text = (resp.text or "").strip()
         return {"text": text, "ok": bool(text), "model": MODEL,
                 "illegible": "[ILLEGIBLE]" in text}
@@ -84,8 +83,7 @@ def read_invoice(data: bytes, mime_type: str = "image/jpeg") -> dict:
     with the amount recorded when the obligation was scheduled.
     """
     try:
-        client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
-        resp = client.models.generate_content(
+        resp = llm.call(lambda c: c.models.generate_content(
             model=MODEL,
             contents=[
                 types.Part.from_bytes(data=data, mime_type=mime_type),
@@ -93,7 +91,7 @@ def read_invoice(data: bytes, mime_type: str = "image/jpeg") -> dict:
             ],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json", response_schema=INVOICE_SCHEMA),
-        )
+        ))
         import json
         seen = json.loads(resp.text)
         seen["read_by"] = f"{MODEL} (vision)"
