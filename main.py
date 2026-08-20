@@ -308,6 +308,16 @@ async def evidence_pack(obligation_id: int):
     return HTMLResponse(html)
 
 
+@api.get("/briefing")
+async def briefing_deck():
+    """A board-ready briefing the agent writes from its own ledger."""
+    from fastapi.responses import HTMLResponse
+    from reaper import briefing, deck
+    facts = briefing.gather()
+    story = briefing.narrate(facts)
+    return HTMLResponse(deck.render(facts, story))
+
+
 @api.get("/calendar.ics")
 async def calendar_feed():
     """Obligation deadlines as an iCalendar feed — subscribe from any calendar."""
