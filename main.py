@@ -226,6 +226,28 @@ async def upload_contract(file: UploadFile):
     return result
 
 
+@api.get("/contracts/{name}")
+async def demo_contract(name: str):
+    """Serve a bundled sample contract (used by the guided demo)."""
+    safe = Path(name).name
+    path = Path(__file__).parent / "data" / "contracts" / safe
+    if not path.exists():
+        raise HTTPException(404, "no such sample contract")
+    return FileResponse(path)
+
+
+@api.get("/obligations/{obligation_id}/invoice")
+async def invoice_document(obligation_id: int):
+    """The invoice document the agent read, exactly as the vendor sent it."""
+    ob = ledger.get_obligation(obligation_id)
+    if ob is None:
+        raise HTTPException(404, "unknown obligation")
+    path = inbox.invoice_path(ob["vendor"])
+    if not path.exists():
+        raise HTTPException(404, "no invoice issued yet")
+    return FileResponse(path)
+
+
 @api.get("/activity")
 async def activity():
     return ledger.recent_activity()
@@ -345,7 +367,18 @@ class Decision(BaseModel):
 @api.post("/obligations/{obligation_id}/approval")
 async def deliver_approval(obligation_id: int, decision: Decision):
     """The human decision arrives — possibly after a full process restart."""
+    # The tool marks the obligation AWAITING_APPROVAL from inside the run, but
+    # the resume pointer is only written once that run yields. Wait out that
+    # gap rather than rejecting an approval that is about to become valid.
     ptr = ledger.pop_resume_pointer(obligation_id)
+    for _ in range(30):
+        if ptr is not None:
+            break
+        ob = ledger.get_obligation(obligation_id)
+        if ob is None or ob["status"] != "AWAITING_APPROVAL":
+            break
+        await asyncio.sleep(0.5)
+        ptr = ledger.pop_resume_pointer(obligation_id)
     if ptr is None:
         raise HTTPException(409, "no pending approval for this obligation")
     ledger.append_receipt(

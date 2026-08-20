@@ -50,3 +50,55 @@ def transcribe_contract_image(data: bytes, mime_type: str) -> dict:
     except Exception as exc:
         return {"text": "", "ok": False, "model": MODEL,
                 "error": f"{type(exc).__name__}: {exc}"[:200]}
+
+
+INVOICE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "vendor": {"type": "string"},
+        "invoice_number": {"type": "string"},
+        "invoice_date": {"type": "string", "description": "ISO YYYY-MM-DD if legible"},
+        "currency": {"type": "string", "description": "ISO code, e.g. USD, INR, GBP"},
+        "total_due": {"type": "number", "description": "the final amount payable"},
+        "description": {"type": "string", "description": "the line-item description"},
+        "legible": {"type": "boolean", "description": "false if the total could not be read with confidence"},
+    },
+    "required": ["vendor", "currency", "total_due", "description", "legible"],
+}
+
+INVOICE_PROMPT = """Read this vendor invoice and report exactly what it says.
+
+Report the TOTAL DUE — the final amount payable, after any subtotal and tax
+lines. Do not calculate, infer or correct anything: if the document shows a
+total, report that figure. If the total is not legible, set legible to false
+and total_due to 0.
+
+Never guess a vendor name or an amount that is not printed on the document."""
+
+
+def read_invoice(data: bytes, mime_type: str = "image/jpeg") -> dict:
+    """Extract the billed amount from an invoice document.
+
+    The model reads the figure; it does not decide anything. Whether the vendor
+    honoured the cancellation is settled downstream by comparing this number
+    with the amount recorded when the obligation was scheduled.
+    """
+    try:
+        client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
+        resp = client.models.generate_content(
+            model=MODEL,
+            contents=[
+                types.Part.from_bytes(data=data, mime_type=mime_type),
+                types.Part(text=INVOICE_PROMPT),
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json", response_schema=INVOICE_SCHEMA),
+        )
+        import json
+        seen = json.loads(resp.text)
+        seen["read_by"] = f"{MODEL} (vision)"
+        seen["ok"] = True
+        return seen
+    except Exception as exc:
+        return {"ok": False, "legible": False, "read_by": "unavailable",
+                "error": f"{type(exc).__name__}: {exc}"[:200]}

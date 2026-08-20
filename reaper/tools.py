@@ -3,7 +3,7 @@
 
 from datetime import date
 
-from . import inbox, ledger
+from . import inbox, ledger, vision
 from .date_engine import gate
 
 
@@ -99,25 +99,53 @@ def send_notice(obligation_id: int, notice_text: str) -> dict:
 
 
 def check_invoice(obligation_id: int) -> dict:
-    """Read the vendor's next-cycle invoice and verify billing stopped.
+    """Read the vendor's next-cycle invoice document and verify billing stopped.
 
-    The verdict is computed deterministically: invoice amount vs the expected
-    final amount recorded at scheduling time.
+    The invoice arrives the way invoices actually arrive - as a document - so
+    the agent reads it with Gemini vision. The model reports the figure printed
+    on the page; the verdict itself is arithmetic, not judgement: billed against
+    the amount recorded when the obligation was scheduled.
     """
     ob = ledger.get_obligation(obligation_id)
     if ob is None:
         return {"error": f"no obligation {obligation_id}"}
-    invoice = inbox.read_next_invoice(ob["vendor"])
-    if invoice is None:
-        invoice = inbox.seed_next_invoice(ob["vendor"], ob["status"] == "NOTICE_SENT")
-    verdict = "VERIFIED" if invoice["amount"] <= ob["expected_final_amount"] else "REFUTED"
-    ledger.append_receipt(obligation_id, "INVOICE_CHECKED", invoice)
+
+    if inbox.read_next_invoice(ob["vendor"]) is None:
+        inbox.seed_next_invoice(ob["vendor"], ob["status"] == "NOTICE_SENT",
+                                ob.get("term_end"))
+
+    doc = inbox.invoice_path(ob["vendor"])
+    seen = (vision.read_invoice(doc.read_bytes(), "image/jpeg")
+            if doc.exists() else {"ok": False, "legible": False})
+
+    if seen.get("ok") and seen.get("legible"):
+        billed = float(seen.get("total_due") or 0.0)
+        read_by = seen.get("read_by", "vision")
+        currency = seen.get("currency", "")
+        description = seen.get("description", "")
+    else:
+        issued = inbox.read_next_invoice(ob["vendor"]) or {}
+        billed = float(issued.get("amount") or 0.0)
+        read_by = "issuer record (document unreadable)"
+        currency = issued.get("currency", "")
+        description = issued.get("memo", "")
+
+    expected = float(ob.get("expected_final_amount") or 0.0)
+    verdict = "VERIFIED" if billed <= expected else "REFUTED"
+
+    ledger.append_receipt(obligation_id, "INVOICE_CHECKED", {
+        "document": doc.name, "read_by": read_by, "billed": billed,
+        "currency": currency, "description": description,
+        "invoice_number": seen.get("invoice_number"),
+        "invoice_date": seen.get("invoice_date"),
+    })
     ledger.append_receipt(obligation_id, verdict, {
-        "billed": invoice["amount"], "expected": ob["expected_final_amount"],
+        "billed": billed, "expected": expected,
+        "test": "billed <= expected", "read_by": read_by,
     })
     ledger.set_status(obligation_id, verdict)
-    return {"verdict": verdict, "billed": invoice["amount"],
-            "expected": ob["expected_final_amount"], "memo": invoice["memo"]}
+    return {"verdict": verdict, "billed": billed, "expected": expected,
+            "currency": currency, "read_by": read_by, "memo": description}
 
 
 def open_dispute(obligation_id: int, dispute_text: str) -> dict:
