@@ -20,7 +20,7 @@ from google.adk.sessions import DatabaseSessionService
 from google.genai import types
 from pydantic import BaseModel
 
-from reaper import clock, inbox, ledger
+from reaper import clock, inbox, ledger, vision
 from reaper.agent import app as adk_app
 from reaper.config import APP_NAME, DB_URL
 from reaper.triage import triage_contract
@@ -180,18 +180,50 @@ async def _intake(text: str) -> dict:
             "obligations": ledger.list_obligations()}
 
 
+def _read_contract(filename: str, raw: bytes, content_type: str) -> tuple[str, dict]:
+    """Get contract text from a file, however it arrived.
+
+    Digital text and text-layer PDFs are parsed locally; photographs, scans and
+    image-only PDFs go to Gemini vision. The deterministic date gate downstream
+    is what makes reading pixels safe at all: a misread numeral cannot silently
+    become a scheduled deadline.
+    """
+    name = (filename or "").lower()
+    is_image = content_type.startswith("image/") or name.endswith(
+        (".png", ".jpg", ".jpeg", ".webp", ".heic", ".gif", ".bmp"))
+
+    if is_image:
+        mime = content_type if content_type.startswith("image/") else "image/jpeg"
+        seen = vision.transcribe_contract_image(raw, mime)
+        return seen["text"], {"how": "gemini-vision", "detail": "read from a photograph",
+                              "model": seen["model"], "illegible": seen.get("illegible", False)}
+
+    if name.endswith(".pdf"):
+        from pypdf import PdfReader
+        try:
+            reader = PdfReader(io.BytesIO(raw))
+            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception:
+            text = ""
+        if text.strip():
+            return text, {"how": "pdf-text-layer", "detail": "parsed from the PDF text layer"}
+        seen = vision.transcribe_contract_image(raw, "application/pdf")
+        return seen["text"], {"how": "gemini-vision",
+                              "detail": "scanned PDF with no text layer, read by Gemini",
+                              "model": seen["model"], "illegible": seen.get("illegible", False)}
+
+    return raw.decode("utf-8", errors="replace"), {"how": "plain-text", "detail": "read as text"}
+
+
 @api.post("/contracts/upload")
 async def upload_contract(file: UploadFile):
     raw = await file.read()
-    if file.filename.lower().endswith(".pdf"):
-        from pypdf import PdfReader
-        reader = PdfReader(io.BytesIO(raw))
-        text = "\n".join(page.extract_text() or "" for page in reader.pages)
-    else:
-        text = raw.decode("utf-8", errors="replace")
+    text, source = _read_contract(file.filename or "", raw, file.content_type or "")
     if not text.strip():
-        raise HTTPException(422, "could not extract any text from the file")
-    return await _intake(text)
+        raise HTTPException(422, "could not read any contract text from that file")
+    result = await _intake(text)
+    result["source"] = source
+    return result
 
 
 @api.get("/activity")
