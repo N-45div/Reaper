@@ -150,6 +150,15 @@ async def landing():
     return FileResponse(STATIC_DIR / "landing.html")
 
 
+@api.get("/static/{name}")
+async def static_asset(name: str):
+    """Serve a front-end asset (cinema director, etc.)."""
+    path = STATIC_DIR / Path(name).name
+    if not path.exists():
+        raise HTTPException(404, "no such asset")
+    return FileResponse(path)
+
+
 @api.get("/app")
 async def dashboard():
     return FileResponse(STATIC_DIR / "index.html")
