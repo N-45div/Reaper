@@ -111,7 +111,8 @@ async def _run(session_id: str, *, text: str | None = None,
             final_text = _final_text(event) or final_text
     except Exception as exc:  # model quota/transient errors mid-run
         if llm.is_quota_error(exc):
-            llm.rotate()  # next run tries the other project's quota
+            llm.rotate()  # next run tries another project's or model's quota
+            adk_app.root_agent.model.model = llm.current_model()
         # Tool effects already committed are in the ledger; the session is in
         # SQL. Nothing is lost — report the ledger truth instead of a 500.
         degraded = (
@@ -393,7 +394,7 @@ async def deliver_approval(obligation_id: int, decision: Decision):
     # The tool marks the obligation AWAITING_APPROVAL from inside the run, but
     # the resume pointer is only written once that run yields. Wait out that
     # gap rather than rejecting an approval that is about to become valid.
-    ptr = ledger.pop_resume_pointer(obligation_id)
+    ptr = ledger.get_resume_pointer(obligation_id)
     for _ in range(30):
         if ptr is not None:
             break
@@ -401,7 +402,7 @@ async def deliver_approval(obligation_id: int, decision: Decision):
         if ob is None or ob["status"] != "AWAITING_APPROVAL":
             break
         await asyncio.sleep(0.5)
-        ptr = ledger.pop_resume_pointer(obligation_id)
+        ptr = ledger.get_resume_pointer(obligation_id)
     if ptr is None:
         raise HTTPException(409, "no pending approval for this obligation")
     ledger.append_receipt(
@@ -422,7 +423,12 @@ async def deliver_approval(obligation_id: int, decision: Decision):
         parts=[response_part],
         invocation_id=ptr["invocation_id"],
     )
-    return {"report": result["final_text"],
+    # Only now is the decision truly delivered. If the resume died mid-flight
+    # the pointer survives, so the approval can be retried instead of being
+    # stranded with the obligation waiting forever.
+    if not result["degraded"]:
+        ledger.clear_resume_pointer(obligation_id)
+    return {"report": result["final_text"], "degraded": result["degraded"],
             "obligation": ledger.get_obligation(obligation_id)}
 
 

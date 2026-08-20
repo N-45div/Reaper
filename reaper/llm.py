@@ -20,8 +20,11 @@ from google import genai
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
+from .config import MODEL_LADDER
+
 _RETRYABLE = ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE", "500", "INTERNAL")
 _index = 0
+_model_index = 0
 
 
 def keys() -> list[str]:
@@ -78,10 +81,22 @@ def call(fn, *, attempts: int = 4, base_delay: float = 4.0):
     raise last
 
 
+def current_model() -> str:
+    """The model the agent should be using right now."""
+    return MODEL_LADDER[_model_index % len(MODEL_LADDER)]
+
+
 def rotate() -> None:
-    """Move to the next key — called when a run fails on quota."""
-    global _index
+    """Step to the next key; once every key is spent, step down the ladder.
+
+    Quota on the free tier is per project and per model, so a run that dies on
+    one combination usually succeeds on another. Nothing about the agent's
+    behaviour changes — only which endpoint answers it.
+    """
+    global _index, _model_index
     _index += 1
+    if len(keys()) and _index % len(keys()) == 0:
+        _model_index += 1
 
 
 def is_quota_error(exc: Exception) -> bool:

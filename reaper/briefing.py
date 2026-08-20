@@ -153,7 +153,7 @@ def gather() -> dict:
 def narrate(facts: dict) -> dict:
     try:
         resp = llm.call(lambda c: c.models.generate_content(
-            model=MODEL,
+            model=llm.current_model(),
             contents=PROMPT % json.dumps(facts, indent=2),
             config=types.GenerateContentConfig(
                 response_mime_type="application/json", response_schema=SCHEMA),

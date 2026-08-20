@@ -54,6 +54,12 @@ def test_resume_pointer_roundtrip(tmp_path, monkeypatch):
         expected_final_amount=None,
     )
     ledger.save_resume_pointer(oid, "u1", "s1", "inv1", "fc1")
-    ptr = ledger.pop_resume_pointer(oid)
-    assert ptr["invocation_id"] == "inv1" and ptr["function_call_id"] == "fc1"
-    assert ledger.pop_resume_pointer(oid) is None
+    ptr = ledger.get_resume_pointer(oid)
+    assert ptr["invocation_id"] == "inv1"
+    assert ptr["function_call_id"] == "fc1"
+
+    # A failed resume must not consume the pointer: reading it twice still works.
+    assert ledger.get_resume_pointer(oid) is not None
+
+    ledger.clear_resume_pointer(oid)
+    assert ledger.get_resume_pointer(oid) is None

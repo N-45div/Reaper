@@ -188,13 +188,16 @@ def save_resume_pointer(obligation_id: int, user_id: str, session_id: str,
         )
 
 
-def pop_resume_pointer(obligation_id: int) -> dict | None:
+def get_resume_pointer(obligation_id: int) -> dict | None:
+    """Read the pending resume pointer without consuming it."""
     with _connect() as conn:
         row = conn.execute(
             "SELECT * FROM pending_resume WHERE obligation_id = ?", (obligation_id,)
         ).fetchone()
-        if row:
-            conn.execute(
-                "DELETE FROM pending_resume WHERE obligation_id = ?", (obligation_id,)
-            )
         return dict(row) if row else None
+
+
+def clear_resume_pointer(obligation_id: int) -> None:
+    """Drop the pointer once the run has actually resumed."""
+    with _connect() as conn:
+        conn.execute("DELETE FROM pending_resume WHERE obligation_id = ?", (obligation_id,))

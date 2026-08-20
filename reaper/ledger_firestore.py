@@ -147,13 +147,15 @@ def save_resume_pointer(obligation_id: int, user_id: str, session_id: str,
     })
 
 
-def pop_resume_pointer(obligation_id: int) -> dict | None:
-    ref = _client().collection("pending_resume").document(str(obligation_id))
-    snap = ref.get()
-    if not snap.exists:
-        return None
-    ref.delete()
-    return snap.to_dict()
+def get_resume_pointer(obligation_id: int) -> dict | None:
+    """Read the pending resume pointer without consuming it."""
+    snap = _client().collection("pending_resume").document(str(obligation_id)).get()
+    return snap.to_dict() if snap.exists else None
+
+
+def clear_resume_pointer(obligation_id: int) -> None:
+    """Drop the pointer once the run has actually resumed."""
+    _client().collection("pending_resume").document(str(obligation_id)).delete()
 
 
 def _purge(col_ref) -> None:

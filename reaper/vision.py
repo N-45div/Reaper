@@ -37,17 +37,17 @@ def transcribe_contract_image(data: bytes, mime_type: str) -> dict:
     """Return {"text": ..., "ok": bool, "model": ...} for an image or PDF."""
     try:
         resp = llm.call(lambda c: c.models.generate_content(
-            model=MODEL,
+            model=llm.current_model(),
             contents=[
                 types.Part.from_bytes(data=data, mime_type=mime_type),
                 types.Part(text=PROMPT),
             ],
         ))
         text = (resp.text or "").strip()
-        return {"text": text, "ok": bool(text), "model": MODEL,
+        return {"text": text, "ok": bool(text), "model": llm.current_model(),
                 "illegible": "[ILLEGIBLE]" in text}
     except Exception as exc:
-        return {"text": "", "ok": False, "model": MODEL,
+        return {"text": "", "ok": False, "model": llm.current_model(),
                 "error": f"{type(exc).__name__}: {exc}"[:200]}
 
 
@@ -84,7 +84,7 @@ def read_invoice(data: bytes, mime_type: str = "image/jpeg") -> dict:
     """
     try:
         resp = llm.call(lambda c: c.models.generate_content(
-            model=MODEL,
+            model=llm.current_model(),
             contents=[
                 types.Part.from_bytes(data=data, mime_type=mime_type),
                 types.Part(text=INVOICE_PROMPT),
@@ -94,7 +94,7 @@ def read_invoice(data: bytes, mime_type: str = "image/jpeg") -> dict:
         ))
         import json
         seen = json.loads(resp.text)
-        seen["read_by"] = f"{MODEL} (vision)"
+        seen["read_by"] = f"{llm.current_model()} (vision)"
         seen["ok"] = True
         return seen
     except Exception as exc:
