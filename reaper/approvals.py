@@ -50,10 +50,12 @@ async def notify_pending(obligation: dict, receipt_hash: str | None = None) -> b
             f"{obligation.get('vendor', '?')}: non-renewal notice drafted.\n"
             f"Notice deadline {deadline}.{hash_note}\n\n"
             "Approve sending it?")
-    keyboard = {"inline_keyboard": [[
-        {"text": "✓ Sign — send the notice", "callback_data": f"d:{oid}:{token}:y"},
-        {"text": "✗ Decline", "callback_data": f"d:{oid}:{token}:n"},
-    ]]}
+    # One button per row: side-by-side labels clip on narrow phones, and the
+    # thing being tapped here deserves to be legible in full.
+    keyboard = {"inline_keyboard": [
+        [{"text": "✓ Sign — send the notice", "callback_data": f"d:{oid}:{token}:y"}],
+        [{"text": "✗ Decline", "callback_data": f"d:{oid}:{token}:n"}],
+    ]}
     try:
         async with aiohttp.ClientSession() as s:
             async with s.post(_api("sendMessage"), json={

@@ -366,9 +366,12 @@ async def access_log():
         kind = r["kind"]
         if kind == "MAILBOX_SCANNED":
             summary["scans"] += 1
-            summary["unseen_total"] += payload.get("unseen", 0)
+            # Declined mail is deliberately left UNSEEN (BODY.PEEK), so each
+            # scan re-counts it; the honest headline is the latest scan plus
+            # the lifetime count of opens.
+            summary["unseen_total"] = payload.get("unseen", 0)
+            summary["declined"] = payload.get("declined", 0)
             summary["opened"] += payload.get("opened", 0)
-            summary["declined"] += payload.get("declined", 0)
         elif kind == "MESSAGE_DISCARDED":
             summary["discarded_no_renewal_language"] += 1
         elif kind == "APPROVAL_DENIED":
