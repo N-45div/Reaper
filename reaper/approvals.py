@@ -67,8 +67,16 @@ async def notify_pending(obligation: dict, receipt_hash: str | None = None) -> b
                         "hash prefix only",
             })
         return ok
-    except Exception:
-        return False  # the in-app path still stands; never block the run
+    except Exception as exc:
+        # The in-app path still stands; never block the run — but a channel
+        # failure is a fact worth recording, not hiding.
+        try:
+            ledger.log_access("PHONE_NOTIFY_FAILED", {
+                "obligation_id": oid, "error": f"{type(exc).__name__}: {exc}"[:160],
+            })
+        except Exception:
+            pass
+        return False
 
 
 def _parse(data: str) -> tuple[int, str, bool] | None:

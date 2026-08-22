@@ -336,6 +336,18 @@ async def activity():
     return ledger.recent_activity()
 
 
+@api.post("/obligations/{obligation_id}/offer")
+async def reoffer_approval(obligation_id: int):
+    """Resend the pending approval to the phone (demo-friendly, idempotent)."""
+    ob = ledger.get_obligation(obligation_id)
+    if ob is None:
+        raise HTTPException(404, "unknown obligation")
+    if ob["status"] != "AWAITING_APPROVAL":
+        raise HTTPException(409, "nothing awaiting approval here")
+    sent = await approvals.notify_pending(ob)
+    return {"offered": sent, "channel": "telegram" if sent else None}
+
+
 @api.get("/access")
 async def access_log():
     """What the mailbox watcher looked at, and — the point — what it refused.
