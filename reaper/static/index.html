@@ -236,7 +236,7 @@ let obs = [], selId = null, lastReport = null;
 const $ = id => document.getElementById(id);
 const toast = m => { const t = $("toast"); t.textContent = m; t.style.display = "block"; setTimeout(() => t.style.display = "none", 5200); };
 const busy = on => $("busy").innerHTML = on ? '<span class="spin"></span>' : "";
-const ago = ts => { const s = (Date.now() - new Date(ts + "Z")) / 1000; return s < 60 ? "now" : s < 3600 ? `${s/60|0}m` : s < 86400 ? `${s/3600|0}h` : `${s/86400|0}d`; };
+const ago = ts => { const iso = (ts.endsWith("Z") || ts.includes("+")) ? ts : ts + "Z"; const s = (Date.now() - new Date(iso)) / 1000; if (!isFinite(s)) return "—"; return s < 60 ? "now" : s < 3600 ? `${s/60|0}m` : s < 86400 ? `${s/3600|0}h` : `${s/86400|0}d`; };
 
 async function refreshClock() {
   try {
