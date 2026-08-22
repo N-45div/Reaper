@@ -96,12 +96,17 @@ def _accept(kind: str, raw: str, check) -> bool:
     return True
 
 
-def redact(text: str) -> Redaction:
+def redact(text: str, keep_emails: bool = False) -> Redaction:
     """Mask identifiers the agent has no business reading.
 
     Contract terms, dates, vendor names and amounts are deliberately untouched:
     those are the substance of the work. What goes is anything that identifies a
     person or a payment instrument.
+
+    keep_emails=True is the CONTRACT profile: a notice clause's whole point is
+    an address ("written notice to cancellations@vendor.test"), and the agent
+    cannot serve notice on a masked recipient. Identity and payment numbers are
+    masked in every profile; only the email rule is purpose-dependent.
     """
     counts: dict[str, int] = {}
     if not text:
@@ -118,11 +123,13 @@ def redact(text: str) -> Redaction:
 
         out = pattern.sub(replace, out)
 
-    # Email addresses last: keep the domain, which is often the vendor's
-    # identity and matters to the obligation, but drop the local part.
-    def hide_local(m: re.Match) -> str:
-        counts["email address"] = counts.get("email address", 0) + 1
-        return f"[redacted]@{m.group(2)}"
+    if not keep_emails:
+        # Keep the domain, which is often the vendor's identity and matters to
+        # the obligation, but drop the person.
+        def hide_local(m: re.Match) -> str:
+            counts["email address"] = counts.get("email address", 0) + 1
+            return f"[redacted]@{m.group(2)}"
 
-    out = re.sub(r"\b([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b", hide_local, out)
+        out = re.sub(r"\b([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b",
+                     hide_local, out)
     return Redaction(text=out, counts=counts)

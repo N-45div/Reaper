@@ -20,7 +20,7 @@ from google.adk.sessions import DatabaseSessionService
 from google.genai import types
 from pydantic import BaseModel
 
-from reaper import clock, inbox, ledger, llm, vision
+from reaper import clock, inbox, ledger, llm, privacy, vision
 from reaper.agent import app as adk_app
 from reaper.config import APP_NAME, DB_URL
 from reaper.triage import triage_contract
@@ -171,24 +171,45 @@ async def demo_reset():
     return {"ok": True}
 
 
-async def _intake(text: str) -> dict:
+async def _intake(text: str, source: dict | None = None) -> dict:
+    # THE MODEL BOUNDARY. Raw text stops here: identifiers are masked before
+    # any model sees a byte. The contract profile keeps email addresses (the
+    # notice depends on one) but cards, Aadhaar, PAN, GSTIN, IBAN, IFSC,
+    # passports and phone numbers never leave the machine.
+    red = privacy.redact(text, keep_emails=True)
+
     # Gemma triage: skip the expensive agent run when there is no renewal
     # clause at all. Fails open — triage never blocks a real contract.
-    triage = triage_contract(text)
+    triage = triage_contract(red.text)
+    redaction = {"profile": "document", "masked": red.total,
+                 "summary": red.summary()}
     if triage["ok"] and not triage["has_renewal"]:
         return {"session_id": None, "triage": triage, "degraded": None,
+                "redaction": redaction,
                 "report": "Triage: no auto-renewal clause found in this "
                           f"document ({triage['model']}). Nothing to schedule.",
                 "obligations": ledger.list_obligations()}
 
+    before = {o["id"] for o in ledger.list_obligations()}
     session_id = f"intake-{uuid.uuid4().hex[:8]}"
     result = await _run(
         session_id,
         text="INTAKE. Extract the auto-renewal obligation from this contract "
-             f"and gate-schedule it.\n\n--- CONTRACT ---\n{text}",
+             f"and gate-schedule it.\n\n--- CONTRACT ---\n{red.text}",
     )
+    # Provenance of the reading and of the masking both belong in the chain.
+    for ob in ledger.list_obligations():
+        if ob["id"] not in before:
+            if source:
+                ledger.append_receipt(ob["id"], "READ_AS", source)
+            ledger.append_receipt(ob["id"], "REDACTED", {
+                "profile": "document", "masked": red.total,
+                "kinds": red.counts,
+                "note": "models received the masked text only",
+            })
     return {"session_id": session_id, "report": result["final_text"],
             "triage": triage, "degraded": result["degraded"],
+            "redaction": redaction,
             "obligations": ledger.list_obligations()}
 
 
@@ -236,16 +257,8 @@ async def upload_contract(file: UploadFile):
     if not text.strip():
         why = source.get("error") or f"nothing readable via {source['how']}"
         raise HTTPException(422, f"could not read any contract text from that file: {why}")
-    before = {o["id"] for o in ledger.list_obligations()}
-    result = await _intake(text)
+    result = await _intake(text, source=source)
     result["source"] = source
-
-    # Provenance of the reading itself belongs in the evidence chain: a clause
-    # transcribed off a photograph and one parsed from a text layer carry
-    # different weight if this ever has to be defended.
-    for ob in ledger.list_obligations():
-        if ob["id"] not in before:
-            ledger.append_receipt(ob["id"], "READ_AS", source)
     return result
 
 

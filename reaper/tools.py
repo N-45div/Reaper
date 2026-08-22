@@ -3,7 +3,7 @@
 
 from datetime import date
 
-from . import inbox, ledger, vision
+from . import delivery, inbox, ledger, vision
 from .date_engine import gate
 
 
@@ -32,6 +32,11 @@ def gate_and_schedule(
     proposed_d = date.fromisoformat(proposed_deadline)
     verdict, derivation = gate(proposed_d, clause_text, term_end_d)
 
+    # HOW the notice must travel is read off the clause deterministically —
+    # never assumed. An email is not a compliant notice under a registered-post
+    # clause, and the ledger must say so from the moment of filing.
+    ruling = delivery.classify(clause_text)
+
     status = "SCHEDULED" if verdict == "MATCH" else "BLOCKED"
     oid = ledger.create_obligation(
         vendor=vendor,
@@ -42,7 +47,7 @@ def gate_and_schedule(
         engine_deadline=derivation.deadline.isoformat() if derivation.deadline else None,
         gate_verdict=verdict,
         status=status,
-        notice_method="email",
+        notice_method=ruling.method,
         recipient=recipient,
         expected_final_amount=expected_final_amount,
     )
@@ -55,14 +60,26 @@ def gate_and_schedule(
         "engine_deadline": str(derivation.deadline),
         "reasons": derivation.reasons,
         "trace": derivation.trace,
+        "delivery_method": ruling.method,
+        "email_compliant": ruling.email_compliant,
+        "delivery_evidence": ruling.evidence,
     })
-    return {
+    result = {
         "obligation_id": oid,
         "gate_verdict": verdict,
         "status": status,
         "engine_deadline": str(derivation.deadline),
         "engine_reasons": derivation.reasons,
+        "delivery_method": ruling.method,
+        "email_compliant": ruling.email_compliant,
     }
+    if not ruling.email_compliant:
+        result["delivery_warning"] = (
+            f"the clause requires {ruling.method.replace('_', ' ').lower()} "
+            f"(\"{ruling.evidence}\"); an email alone is NOT a compliant notice "
+            "for this contract"
+        )
+    return result
 
 
 def request_notice_approval(obligation_id: int, notice_summary: str) -> dict:
@@ -92,10 +109,27 @@ def send_notice(obligation_id: int, notice_text: str) -> dict:
     ob = ledger.get_obligation(obligation_id)
     if ob is None:
         return {"error": f"no obligation {obligation_id}"}
-    delivery = inbox.deliver_notice(ob["vendor"], notice_text, obligation_id)
-    receipt = ledger.append_receipt(obligation_id, "NOTICE_SENT", delivery)
+
+    ruling = delivery.classify(ob.get("clause_text") or "")
+    record = inbox.deliver_notice(ob["vendor"], notice_text, obligation_id)
+    record["delivery_method_required"] = ruling.method
+    record["email_compliant"] = ruling.email_compliant
+    if not ruling.email_compliant:
+        # Honest labelling: this email is a courtesy copy, not the compliant
+        # notice. The compliant channel still needs a human to act.
+        record["compliance"] = "COURTESY_COPY_ONLY"
+        record["compliant_channel_still_required"] = ruling.method
+
+    receipt = ledger.append_receipt(obligation_id, "NOTICE_SENT", record)
     ledger.set_status(obligation_id, "NOTICE_SENT")
-    return {"delivered": True, "receipt_hash": receipt["hash"], **delivery}
+    out = {"delivered": True, "receipt_hash": receipt["hash"], **record}
+    if not ruling.email_compliant:
+        out["warning"] = (
+            f"clause demands {ruling.method.replace('_', ' ').lower()}; the "
+            "email is recorded as a courtesy copy and the printable notice pack "
+            "must be dispatched by the compliant channel"
+        )
+    return out
 
 
 def check_invoice(obligation_id: int) -> dict:
