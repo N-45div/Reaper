@@ -20,7 +20,7 @@ from google.adk.sessions import DatabaseSessionService
 from google.genai import types
 from pydantic import BaseModel
 
-from reaper import clock, inbox, ledger, llm, privacy, vision
+from reaper import approvals, clock, inbox, ledger, llm, mailbox, privacy, vision
 from reaper.agent import app as adk_app
 from reaper.config import APP_NAME, DB_URL
 from reaper.triage import triage_contract
@@ -67,10 +67,52 @@ async def _ticker():
                             "ledger_date": today.isoformat(),
                         })
                         await _process_invoice(oid)
-            except Exception:
-                pass  # transient (e.g. model quota); retried on a later tick
+            except Exception as exc:
+                # Transient (e.g. model quota) — retried on a later tick, but
+                # the chain should say a wake happened and did not finish.
+                try:
+                    ledger.log_access("WAKE_INCOMPLETE", {
+                        "obligation_id": oid,
+                        "error": type(exc).__name__,
+                        "note": "retried on a later tick",
+                    })
+                except Exception:
+                    pass
             finally:
                 _in_flight.discard(oid)
+
+
+async def _mailbox_loop():
+    """Poll the owned mailbox; feed admitted documents into the normal intake."""
+    poll = int(os.getenv("REAPER_MAIL_POLL_SECONDS", "60"))
+    while True:
+        await asyncio.sleep(poll)
+        try:
+            result = await asyncio.to_thread(mailbox.scan_once)
+            for item in result.admitted:
+                if item["kind"] == "reply":
+                    oid = mailbox.record_vendor_reply(item)
+                    if oid is None:
+                        ledger.log_access("REPLY_UNMATCHED", {
+                            "message_id_hash": item["message_id_hash"]})
+                    continue
+                text = item["body"] or ""
+                if item.get("attachment") and item["attachment"]["data"]:
+                    att = item["attachment"]
+                    att_text, _src = _read_contract(
+                        att["filename"], att["data"], att["content_type"])
+                    text = f"{text}\n\n{att_text}".strip()
+                if text.strip():
+                    await _intake(text, source={
+                        "how": "email",
+                        "detail": item["reason"],
+                        "message_id_hash": item["message_id_hash"],
+                        "content_sha256": item["content_sha256"],
+                    })
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            pass  # transient (network, quota); next poll retries
 
 
 @asynccontextmanager
@@ -78,9 +120,14 @@ async def lifespan(_app: FastAPI):
     global runner
     session_service = DatabaseSessionService(db_url=DB_URL)
     runner = Runner(app=adk_app, session_service=session_service)
-    tick_task = asyncio.create_task(_ticker())
+    tasks = [asyncio.create_task(_ticker())]
+    if approvals.configured():
+        tasks.append(asyncio.create_task(approvals.poll_loop(_deliver_decision)))
+    if mailbox.configured():
+        tasks.append(asyncio.create_task(_mailbox_loop()))
     yield
-    tick_task.cancel()
+    for t in tasks:
+        t.cancel()
 
 
 api = FastAPI(title="Reaper", lifespan=lifespan)
@@ -289,6 +336,38 @@ async def activity():
     return ledger.recent_activity()
 
 
+@api.get("/access")
+async def access_log():
+    """What the mailbox watcher looked at, and — the point — what it refused.
+
+    The denominator is the claim: unseen counted, declined hashed, opened
+    listed with reasons, all inside hash chain zero.
+    """
+    import json as _json
+    receipts = ledger.get_receipts(0)
+    intact, _broken = ledger.verify_chain(0)
+    summary = {"scans": 0, "unseen_total": 0, "opened": 0, "declined": 0,
+               "discarded_no_renewal_language": 0, "denied_approvals": 0}
+    recent = []
+    for r in receipts[-80:]:
+        payload = _json.loads(r["payload"])
+        kind = r["kind"]
+        if kind == "MAILBOX_SCANNED":
+            summary["scans"] += 1
+            summary["unseen_total"] += payload.get("unseen", 0)
+            summary["opened"] += payload.get("opened", 0)
+            summary["declined"] += payload.get("declined", 0)
+        elif kind == "MESSAGE_DISCARDED":
+            summary["discarded_no_renewal_language"] += 1
+        elif kind == "APPROVAL_DENIED":
+            summary["denied_approvals"] += 1
+        recent.append({"kind": kind, "ts": r["ts"], "hash": r["hash"],
+                       "payload": payload})
+    return {"chain_intact": intact, "configured": mailbox.configured(),
+            "telegram": approvals.configured(),
+            "summary": summary, "recent": recent[-30:]}
+
+
 @api.get("/obligations/{obligation_id}/pack")
 async def evidence_pack(obligation_id: int):
     """The printable evidence pack: obligation, clause, gate, full chain."""
@@ -394,6 +473,11 @@ async def _open_notice_window(obligation_id: int) -> dict:
             result["pending"]["invocation_id"],
             result["pending"]["function_call_id"],
         )
+        # Offer the signature where the human actually is: on the phone.
+        # Failure is harmless — the in-app approval stands regardless.
+        fresh = ledger.get_obligation(obligation_id)
+        if fresh is not None:
+            await approvals.notify_pending(fresh)
     return {"report": result["final_text"], "degraded": result["degraded"],
             "awaiting_approval": result["pending"] is not None}
 
@@ -413,6 +497,20 @@ class Decision(BaseModel):
 @api.post("/obligations/{obligation_id}/approval")
 async def deliver_approval(obligation_id: int, decision: Decision):
     """The human decision arrives — possibly after a full process restart."""
+    result = await _deliver_decision(obligation_id, decision.approve,
+                                     via={"channel": "app"})
+    if result is None:
+        raise HTTPException(409, "no pending approval for this obligation")
+    return result
+
+
+async def _deliver_decision(obligation_id: int, approve: bool, via: dict) -> dict | None:
+    """One decision path for every channel — app, Telegram, whatever comes.
+
+    WHO authorised the notice and THROUGH WHICH CHANNEL is exactly the question
+    a vendor will raise later, so the channel goes into the APPROVED receipt.
+    Returns None when nothing is pending.
+    """
     # The tool marks the obligation AWAITING_APPROVAL from inside the run, but
     # the resume pointer is only written once that run yields. Wait out that
     # gap rather than rejecting an approval that is about to become valid.
@@ -426,21 +524,21 @@ async def deliver_approval(obligation_id: int, decision: Decision):
         await asyncio.sleep(0.5)
         ptr = ledger.get_resume_pointer(obligation_id)
     if ptr is None:
-        raise HTTPException(409, "no pending approval for this obligation")
+        return None
     # The decision is recorded once, even if delivering it takes several
     # attempts: an evidence chain with two APPROVED entries for one signature
     # is a defect, not a detail.
-    kind = "APPROVED" if decision.approve else "REJECTED"
+    kind = "APPROVED" if approve else "REJECTED"
     already = any(r["kind"] in ("APPROVED", "REJECTED")
                   for r in ledger.get_receipts(obligation_id))
     if not already:
-        ledger.append_receipt(obligation_id, kind, {})
+        ledger.append_receipt(obligation_id, kind, via)
     response_part = types.Part(
         function_response=types.FunctionResponse(
             id=ptr["function_call_id"],
             name="request_notice_approval",
             response={
-                "status": "approved" if decision.approve else "rejected",
+                "status": "approved" if approve else "rejected",
                 "obligation_id": obligation_id,
             },
         )

@@ -160,6 +160,10 @@
       <div class="bh">Entries</div>
       <div id="obs"></div>
     </div>
+    <div class="box" style="margin-top:18px">
+      <div class="bh">Mailbox watch <span class="chainline y" id="acc-chain"></span></div>
+      <div class="bb" id="access"><span style="color:var(--muted);font-size:13px">loading…</span></div>
+    </div>
   </section>
 
   <section>
@@ -206,6 +210,15 @@ const NARR = {
 };
 const ENTRY = {
   READ_AS:            ["Document read", "how the contract text was obtained", ""],
+  REDACTED:           ["Identifiers masked", "models received redacted text only", ""],
+  APPROVAL_OFFERED:   ["Signature offered on phone", "no contract text left the app", ""],
+  VENDOR_REPLY:       ["Vendor replied", "third-party record captured from the notice thread", "good"],
+  MAILBOX_SCANNED:    ["Mailbox scanned", "headers only; bodies fetched for admitted messages", ""],
+  MESSAGE_OPENED:     ["Message opened", "admitted by the deterministic gate, with reason", ""],
+  MESSAGE_DISCARDED:  ["Message discarded", "admitted but no renewal language; no model called", ""],
+  APPROVAL_DENIED:    ["Approval refused", "unenrolled device or stale token", "bad"],
+  REPLY_UNMATCHED:    ["Reply unmatched", "reply did not match any notice thread", ""],
+  SEND_FAILED:        ["Send failed", "smtp delivery failed; simulated channel used", "bad"],
   WOKE:               ["Agent woke", "the calendar reached an event — no human trigger", ""],
   EXTRACTED:          ["Clause extracted", "Gemini quoted the renewal clause verbatim", ""],
   GATED:              ["Deadline gated", "engine re-derived the deadline independently", ""],
@@ -248,7 +261,7 @@ async function chaosKill() {
       if (r.ok) {
         clearInterval(wait);
         toast(`Resurrected after ${((Date.now() - t0) / 1000).toFixed(1)}s — ledger, clock and any paused approval intact.`);
-        refresh(); refreshClock();
+        refresh(); refreshClock(); renderAccess();
       }
     } catch (e) { /* still down */ }
   }, 700);
@@ -323,7 +336,7 @@ async function renderDetail() {
     ${acts(o.status)}
     <div class="narr">${na[0]}<span class="sub">${na[1]}</span></div>
     <div class="exhibit">
-      <div class="eh"><span>EXHIBIT — renewal clause, verbatim</span><span>notice to: ${o.recipient ?? "—"}</span></div>
+      <div class="eh"><span>EXHIBIT — renewal clause, verbatim</span><span>notice to: ${o.recipient ?? "—"} · method: ${(o.notice_method ?? "?").replace(/_/g, " ").toLowerCase()}</span></div>
       <div class="clause">“${o.clause_text.slice(0, 230)}${o.clause_text.length > 230 ? "…" : ""}”</div>
       <div class="cmp">
         <div class="vc"><div class="who">The model reads</div><div class="date">${o.llm_deadline ?? "—"}</div></div>
@@ -355,6 +368,30 @@ async function renderFeed() {
     return `<div class="row"><span class="t">${ago(a.ts)}</span><div class="v">${a.vendor}</div>
       <div class="e"><b>${e[0]}</b> — ${e[1]}</div></div>`;
   }).join("") : '<div class="quiet">The register is empty.</div>';
+}
+
+async function renderAccess() {
+  try {
+    const a = await (await fetch("/access")).json();
+    const el = document.getElementById("access");
+    document.getElementById("acc-chain").textContent = a.chain_intact ? "chain intact" : "CHAIN BROKEN";
+    if (!a.configured) {
+      el.innerHTML = '<span style="color:var(--muted);font-size:13px">No mailbox enrolled. ' +
+        'Reaper holds no read permission on any inbox — it watches only a mailbox it owns.</span>';
+      return;
+    }
+    const s = a.summary;
+    el.innerHTML = `
+      <div style="font-family:var(--mono);font-size:12.5px;line-height:2">
+        matched <b style="float:right">${s.unseen_total}</b><br>
+        declined unread <b style="float:right">${s.declined}</b><br>
+        opened <b style="float:right">${s.opened}</b><br>
+        discarded, no model call <b style="float:right">${s.discarded_no_renewal_language}</b>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:8px">
+        every open and every refusal is a hash-chained record${a.telegram ? " · phone approvals armed" : ""}
+      </div>`;
+  } catch (e) { /* panel is informational */ }
 }
 
 function sel(id) { selId = id; refresh(); }
@@ -392,7 +429,7 @@ async function upload(f) {
 }
 
 refresh(); refreshClock();
-setInterval(refresh, 5000); setInterval(refreshClock, 5000);
+setInterval(refresh, 5000); setInterval(refreshClock, 5000); setInterval(renderAccess, 7000);
 </script>
 
 </body>

@@ -111,7 +111,30 @@ def send_notice(obligation_id: int, notice_text: str) -> dict:
         return {"error": f"no obligation {obligation_id}"}
 
     ruling = delivery.classify(ob.get("clause_text") or "")
-    record = inbox.deliver_notice(ob["vendor"], notice_text, obligation_id)
+
+    # A real mailbox sends a real email whose Message-ID becomes evidence and
+    # whose thread captures the vendor's reply. Without one, the simulated
+    # vendor world stands in — and the record says which happened.
+    from . import mailbox
+    record = None
+    if mailbox.configured() and ob.get("recipient"):
+        try:
+            sent = mailbox.send_email(
+                ob["recipient"],
+                f"Notice of non-renewal — {ob['vendor']}",
+                notice_text, obligation_id)
+            if sent:
+                record = {**sent, "channel": "smtp",
+                          "delivered_on": date.today().isoformat()}
+        except Exception as exc:
+            record = None
+            ledger.log_access("SEND_FAILED", {
+                "obligation_id": obligation_id,
+                "error": f"{type(exc).__name__}"[:80],
+            })
+    if record is None:
+        record = inbox.deliver_notice(ob["vendor"], notice_text, obligation_id)
+        record["channel"] = "simulated"
     record["delivery_method_required"] = ruling.method
     record["email_compliant"] = ruling.email_compliant
     if not ruling.email_compliant:

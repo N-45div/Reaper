@@ -93,11 +93,17 @@ def append_receipt(obligation_id: int, kind: str, payload: dict) -> dict:
         "prev_hash": prev_hash, "hash": digest,
     })
     ob = get_obligation(obligation_id)
+    vendor = (ob or {}).get("vendor") or ("mailbox" if obligation_id == 0 else "?")
     _client().collection("activity").add({
-        "obligation_id": obligation_id, "vendor": (ob or {}).get("vendor", "?"),
+        "obligation_id": obligation_id, "vendor": vendor,
         "kind": kind, "ts": ts, "hash": digest,
     })
     return {"kind": kind, "ts": ts, "hash": digest}
+
+
+def log_access(kind: str, payload: dict) -> dict:
+    """Append a mailbox-access event to chain zero (see ledger_sqlite)."""
+    return append_receipt(0, kind, payload)
 
 
 def get_receipts(obligation_id: int) -> list[dict]:

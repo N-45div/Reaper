@@ -156,14 +156,26 @@ def set_meta(key: str, value: str) -> None:
         conn.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, value))
 
 
+def log_access(kind: str, payload: dict) -> dict:
+    """Append a mailbox-access event to chain zero.
+
+    Chain 0 is the mailbox's own hash chain. Interleaving access events into
+    the same evidence system the dispute case depends on is the point:
+    falsifying the access log would break the very chain the product needs
+    intact to win. Cheating is self-destructive by construction.
+    """
+    return append_receipt(0, kind, payload)
+
+
 def recent_activity(limit: int = 40) -> list[dict]:
     """All receipts across obligations, newest first, with vendor names."""
     with _connect() as conn:
         return [
             dict(r)
             for r in conn.execute(
-                "SELECT r.id, r.obligation_id, r.kind, r.ts, r.hash, o.vendor "
-                "FROM receipts r JOIN obligations o ON o.id = r.obligation_id "
+                "SELECT r.id, r.obligation_id, r.kind, r.ts, r.hash, "
+                "COALESCE(o.vendor, 'mailbox') AS vendor "
+                "FROM receipts r LEFT JOIN obligations o ON o.id = r.obligation_id "
                 "ORDER BY r.id DESC LIMIT ?",
                 (limit,),
             )

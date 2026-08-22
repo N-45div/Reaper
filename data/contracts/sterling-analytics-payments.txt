@@ -1,0 +1,16 @@
+SUBSCRIPTION SERVICES AGREEMENT
+
+Between Sterling Analytics Co. ("Provider") and Meridian Retail LLP ("Customer").
+
+1. SERVICES. Provider supplies the Sterling BI platform at $180.00 per month,
+charged to the Customer card on file 4111 1111 1111 1111 (cardholder PAN
+ABCDE1234F, contact +91 98765 43210).
+
+2. TERM. The current term runs from 1 October 2025 through 30 September 2026.
+
+3. RENEWAL. This Agreement shall automatically renew for successive one-year
+periods unless the Customer provides written notice of non-renewal at least
+thirty (30) days prior to the end of the then-current term, delivered to
+renewals@sterlinganalytics.test.
+
+4. GOVERNING LAW. Delaware.
