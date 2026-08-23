@@ -7,6 +7,8 @@ re-derivation, no notice leaves without a human signature, and every step is
 hash-chained into an append-only evidence ledger. If the agent is ever wrong,
 the ledger is how you find out; if a vendor disputes, the ledger is how you win.
 
+![Reaper system architecture](docs/architecture.png)
+
 ## System map
 
 ```mermaid
