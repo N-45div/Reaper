@@ -34,10 +34,12 @@ Built on **google-adk 2.6.3** (single resumable `LlmAgent`,
 `LongRunningFunctionTool` + `ResumabilityConfig` + `DatabaseSessionService`),
 **Gemini 3.5 Flash** with a **Gemma 4** triage filter, FastAPI, and Google
 Cloud: the evidence chain lives in **Firestore** (hash-chained receipts,
-activity register, clock state), with Pub/Sub as the production wake path —
-all on the no-billing free tier.
+activity register, clock state), with Cloud Scheduler → Pub/Sub as the
+production slot for the wake ticker.
 
-![Architecture](docs/architecture.svg)
+**[Architecture deep-dive →](ARCHITECTURE.md)** — the system map, the
+autonomous arc, the durable pause, the hash-chained evidence ledger, and the
+trust boundaries, all as diagrams.
 
 ## Run it locally
 
