@@ -1,6 +1,6 @@
 """Shared Gemini access with quota resilience.
 
-The free tier throttles hard (roughly ten requests a minute), and this agent
+Gemini API quotas bite hardest exactly when nobody is watching, and this agent
 does its most important work unattended — waking at night, reading an invoice
 weeks after a notice went out. A throttled call must never look like a verdict.
 So every direct model call goes through here: transient 429s are retried with
@@ -89,7 +89,7 @@ def current_model() -> str:
 def rotate() -> None:
     """Step to the next key; once every key is spent, step down the ladder.
 
-    Quota on the free tier is per project and per model, so a run that dies on
+    API quota is granted per project and per model, so a run that dies on
     one combination usually succeeds on another. Nothing about the agent's
     behaviour changes — only which endpoint answers it.
     """

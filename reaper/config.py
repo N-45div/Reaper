@@ -11,8 +11,8 @@ DATA_DIR = REPO_ROOT / "data"
 DB_URL = os.getenv("REAPER_DB_URL", f"sqlite+aiosqlite:///{(DATA_DIR / 'reaper.db').as_posix()}")
 MODEL = os.getenv("REAPER_MODEL", "gemini-3.5-flash")
 
-# Free-tier quota is granted per project AND per model (20 requests/day each),
-# so when one runs dry the agent steps down this ladder rather than stopping.
+# Gemini API quota is granted per project AND per model, so when one model's
+# daily budget runs dry the agent steps down this ladder rather than stopping.
 # Every entry is Gemini 3.5 or newer, as the work requires.
 MODEL_LADDER = [m.strip() for m in os.getenv(
     "REAPER_MODEL_LADDER",

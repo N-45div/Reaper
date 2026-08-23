@@ -7,8 +7,8 @@ Same public surface and identical hash-chain math as ledger_sqlite. Documents:
   pending_resume/{id}             resume pointers for paused approvals
   meta/{key}                      clock offset, id counter, misc
 
-Free tier: 1 GiB / 50k reads / 20k writes per day — orders of magnitude above
-demo load. Single-writer demo semantics: append uses read-then-write.
+Firestore quotas sit orders of magnitude above this workload.
+Single-writer demo semantics: append uses read-then-write.
 """
 
 import hashlib
