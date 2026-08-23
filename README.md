@@ -77,7 +77,7 @@ deterministic gate block a clause whose written words and numerals disagree.
 ## Tests & the eval exam
 
 ```bash
-.venv/Scripts/python -m pytest tests -q          # 14 deterministic unit tests
+.venv/Scripts/python -m pytest tests -q          # 35 deterministic unit tests
 .venv/Scripts/python scripts/make_evalset.py     # regenerate the ADK eval set
 REAPER_LEDGER=sqlite .venv/Scripts/adk eval reaper evals/reaper.evalset.json --config_file_path evals/eval_config.json
 ```
