@@ -41,6 +41,10 @@ production slot for the wake ticker.
 autonomous arc, the durable pause, the hash-chained evidence ledger, and the
 trust boundaries, all as diagrams.
 
+**[Reproducible testing guide →](TESTING.md)** — spin-up, three guided
+walkthroughs (villain path, trap clause, photographed contract), the
+kill-the-process test, the 35-test suite, and the agent exam.
+
 ## Run it locally
 
 ```bash
