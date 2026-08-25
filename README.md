@@ -1,105 +1,173 @@
 # Reaper
 
-**The agent that finishes the cancellation chore — and checks that the vendor obeyed.**
+**The agent that finishes the cancellation chore — and checks that the vendor
+obeyed.**
+
+[**Live demo**](https://reaper-sxxs.onrender.com) ·
+[**Architecture**](ARCHITECTURE.md) ·
+[**Testing guide**](TESTING.md)
 
 Every renewal tool on the market stops at reminding a human. Reaper sleeps for
-weeks as a durable timer, wakes inside the contractual notice window, sends the
-actual non-renewal notice after one human approval, hash-stamps the delivery
-receipt — then reads the *next invoice* to verify the vendor really stopped
-billing. If they billed anyway, it opens the dispute itself, attaching its own
-timestamped receipt as evidence.
-
-And it refuses to trust its own AI: a **deterministic date engine**
-independently re-derives every notice deadline from the raw clause text. Any
-mismatch with the LLM's reading **blocks scheduling** — no notice is ever
-queued on an unverified date.
-
-## How it works
+months as a durable timer, wakes inside the contractual notice window, sends
+the actual non-renewal notice after one human approval, hash-stamps the
+delivery receipt — then reads the *next invoice* to verify the vendor really
+stopped billing. If they billed anyway, it opens the dispute itself, attaching
+its own timestamped receipt as evidence.
 
 ```
-contract PDF ──► INTAKE      Gemini extracts the renewal clause verbatim;
-                             the date engine re-derives the deadline.
-                             MATCH → scheduled · MISMATCH/AMBIGUOUS → BLOCKED
-        ⏸ agent sleeps until the notice window (zero tokens burned)
-notice window ─► NOTICE      drafts the formal non-renewal notice, pauses
-                             durably for ONE human approval — the pause
-                             survives full process restarts
-        ✉ notice delivered, receipt SHA-256-chained into the ledger
-next invoice ──► VERIFY      deterministic check: billed vs expected
-                             VERIFIED → done · REFUTED → dispute opened with
-                             the delivery receipt attached as evidence
+contract in ───► READ & GATE   Gemini quotes the renewal clause verbatim;
+                               a deterministic date engine re-derives the
+                               deadline. MATCH → scheduled · disagreement
+                               → BLOCKED, a human is asked
+        ⏸  SLEEP               months pass; zero tokens burned
+        ⏰  WAKE                the calendar reaches the window — no human
+                               trigger, and the wake is itself a receipt
+        ✍  SIGN                ONE human approval, on a phone; the pause is
+                               durable and survives full process restarts
+        ✉  SERVE               real SMTP notice; the Message-ID is hash-
+                               chained as delivery evidence
+next invoice ──► VERIFY        billed vs expected is arithmetic, not opinion
+                               VERIFIED → done · REFUTED → dispute filed,
+                               delivery receipt attached
 ```
 
-Built on **google-adk 2.6.3** (single resumable `LlmAgent`,
-`LongRunningFunctionTool` + `ResumabilityConfig` + `DatabaseSessionService`),
-**Gemini 3.5 Flash** with a **Gemma 4** triage filter, FastAPI, and Google
-Cloud: the evidence chain lives in **Firestore** (hash-chained receipts,
-activity register, clock state), with Cloud Scheduler → Pub/Sub as the
-production slot for the wake ticker.
+## Three rules it never breaks
 
-**[Architecture deep-dive →](ARCHITECTURE.md)** — the system map, the
-autonomous arc, the durable pause, the hash-chained evidence ledger, and the
-trust boundaries, all as diagrams.
+**1. The model proposes, deterministic engines dispose.** Gemini reads the
+clause and suggests a deadline; plain regex-and-calendar code re-derives it
+from the same text. Any disagreement blocks scheduling — including the demo's
+booby-trapped clause that reads *"sixty (90) days"*, and a live run where the
+model was one day off and the gate caught it. Delivery method and invoice
+verdicts are decided the same way: in code, not in confidence.
 
-**[Try the live demo →](https://reaper-sxxs.onrender.com)** — a hosted test
-instance. It writes to the same Firestore evidence ledger shown in the demo
-video. Compute runs on Render; the evidence chain lives on Google Cloud.
+**2. One signature, and the pause is real.** The run parks mid-plan on a
+durable ADK pause (`LongRunningFunctionTool` + `ResumabilityConfig` +
+`DatabaseSessionService`). Kill the process while it waits — the demo does,
+on camera — and a brand-new process picks up the same pending approval.
+Signatures arrive in-app or on a phone via Telegram, with single-use tokens;
+the chain records which device and channel authorised the notice.
 
-**Precedent memory (BigQuery).** Reaper also remembers. Every clause it
-gates is embedded with **gemini-embedding-001** and matched by vector search
-against a **BigQuery** store of prior clause shapes and their outcomes — so
-when a new contract looks like one that was BLOCKED, or like one where the
-vendor billed anyway, the report says so. Strictly advisory: the lookup runs
-*after* the deterministic gate has ruled, every consultation (or failed
-consultation) is hash-chained as a `PRECEDENT_CONSULTED` receipt, and history
-can never change a verdict.
+**3. Evidence, or it didn't happen.** Every material step is a SHA-256
+hash-chained receipt in Firestore, re-verified on every read. Chain 0 is
+Reaper's own mailbox access log — every header scan, every message it
+*declined* to open. Falsifying what it read would break the same chain its
+dispute evidence depends on: cheating is self-destructive by construction.
+One click exports a printable evidence pack, recomputed from the genesis
+record.
 
-**[Reproducible testing guide →](TESTING.md)** — spin-up, three guided
-walkthroughs (villain path, trap clause, photographed contract), the
-kill-the-process test, the 35-test suite, and the agent exam.
+![Reaper system architecture](docs/architecture.png)
+
+## What's inside
+
+- **Deterministic date gate** — word-vs-numeral conflict detection,
+  days/weeks/months units, anchor recognition; an honest `AMBIGUOUS` beats a
+  confident guess
+- **Delivery-method rulings** — a clause demanding registered post gets a
+  `COURTESY_COPY_ONLY` label on email, never a pretended service
+- **Privacy at the model boundary** — cards (Luhn-validated), Aadhaar
+  (Verhoeff-validated), PAN, GSTIN, IFSC, IBAN, passport and phone numbers are
+  masked before any model sees a byte, with a receipt saying how many
+- **A Reaper-owned mailbox** — IMAP, headers first, zero OAuth scopes on
+  anyone's real account; Gemma 4 triages for renewal language before the big
+  model is ever woken
+- **Multimodal intake** — text, PDFs, scans, photographed contracts (Gemini
+  vision), and invoices read *as documents*, the way they actually arrive
+- **Precedent memory (BigQuery)** — every gated clause is embedded with
+  `gemini-embedding-001` and matched by `VECTOR_SEARCH` against prior clause
+  shapes and outcomes: *"a near-identical clause was BLOCKED before"*, or
+  *"this vendor billed anyway last time."* Strictly advisory — the lookup runs
+  after the gate has ruled, every consultation (even a failed one) is a
+  `PRECEDENT_CONSULTED` receipt, and history can never change a verdict
+- **Autonomy you can audit** — unprompted wakes are `WOKE` receipts; a
+  refuted billing verdict that the agent's turn failed to act on is filed by
+  a deterministic backstop, and the chain says the backstop did it
+- **An obligations calendar** (`/calendar.ics`), a printable evidence pack
+  per obligation, and a briefing deck (`/briefing`)
+
+## The Google stack
+
+| Piece | Role |
+|---|---|
+| **Gemini 3.5 Flash** (Gemini API) | reads contracts, drafts notices, reads invoice documents |
+| **Gemma 4** | mailbox triage — is there renewal language at all? |
+| **gemini-embedding-001** | 768-dim clause vectors for precedent memory |
+| **Google ADK 2.6.3** | the single resumable `LlmAgent` and its durable pause |
+| **Firestore** | the hash-chained evidence ledger, activity register, clock |
+| **BigQuery** | the precedent store, matched with native `VECTOR_SEARCH` |
+
+FastAPI serves the app; the hosted demo runs the container on Render with
+sessions in Postgres, writing to the same Firestore ledger. Cloud Scheduler →
+Pub/Sub is the production slot for the wake ticker.
+
+## Try the live instance
+
+**https://reaper-sxxs.onrender.com** — the ledger UI is at
+[`/app`](https://reaper-sxxs.onrender.com/app). It serves the same Firestore
+evidence chain shown in the demo video. Worth poking:
+
+```bash
+curl https://reaper-sxxs.onrender.com/obligations            # the real ledger
+curl https://reaper-sxxs.onrender.com/precedents/status      # BigQuery store health
+curl -X POST https://reaper-sxxs.onrender.com/chaos/kill     # yes, really — the
+                                                             # pause survives it
+```
+
+First request after an idle spell can take ~30 seconds.
 
 ## Run it locally
 
+Needs only a free Gemini API key (aistudio.google.com/apikey) — no billing
+account, no Google Cloud project.
+
 ```bash
 python -m venv .venv && .venv/Scripts/pip install -r requirements.txt
-cp .env.example .env      # add your Gemini API key (aistudio.google.com/apikey)
+cp .env.example .env                       # set GOOGLE_API_KEY
 .venv/Scripts/uvicorn main:api --port 8080
 ```
 
-Then walk the whole loop:
+Then walk the whole loop (five demo contracts live in `data/contracts/`):
 
 ```bash
-# 1. INTAKE — upload a contract (three demo contracts in data/contracts/)
+# 1. READ & GATE — file a contract
 curl -F "file=@data/contracts/cloudco-metrics-msa.txt" localhost:8080/contracts/upload
 
-# 2. NOTICE — the notice window opens (in prod: Cloud Scheduler fires this)
+# 2. WAKE — the notice window opens (in prod the ticker does this itself)
 curl -X POST localhost:8080/obligations/1/notice-window
 
 #    ── kill the server here and restart it: the pending approval survives ──
 
-# 3. The human decision arrives
+# 3. SIGN — the human decision arrives
 curl -X POST localhost:8080/obligations/1/approval -H "Content-Type: application/json" -d '{"approve": true}'
 
 # 4. VERIFY — the vendor's next invoice lands
 curl -X POST localhost:8080/obligations/1/invoice-arrived
 
-# 5. Inspect the hash-chained evidence trail
+# 5. Audit the hash chain
 curl localhost:8080/obligations/1/receipts
 ```
 
-Upload `data/contracts/datavault-pro-services.txt` for the villain path (vendor
-bills anyway → autonomous dispute), and `ambiguous-hostwave.txt` to watch the
-deterministic gate block a clause whose written words and numerals disagree.
+If step 1 comes back **`BLOCKED`**, that is the product working, not a broken
+demo: the gate compares two independent readings, and the model's arithmetic
+is not deterministic — read the `GATED` receipt for both dates and the trace.
+Upload `datavault-pro-services.txt` for the villain path (vendor bills anyway
+→ autonomous dispute), `ambiguous-hostwave.txt` to watch the *"sixty (90)
+days"* trap get refused, and `northwind-facilities-photo.jpg` to file a
+photographed contract. The **[testing guide](TESTING.md)** walks every path
+with expected outputs, including the precedent store setup.
 
 ## Tests & the eval exam
 
 ```bash
-.venv/Scripts/python -m pytest tests -q          # 39 deterministic unit tests
+.venv/Scripts/python -m pytest tests -q          # 51 deterministic unit tests
 .venv/Scripts/python scripts/make_evalset.py     # regenerate the ADK eval set
 REAPER_LEDGER=sqlite .venv/Scripts/adk eval reaper evals/reaper.evalset.json --config_file_path evals/eval_config.json
 ```
 
-The eval exam runs the live agent against two contracts and scores it with a
-deterministic ROUGE metric (no LLM judge — fitting, for a product whose thesis
-is "don't trust the model's own reading"): the clean clause must be gated
-MATCH and scheduled; the planted words-vs-numerals trap must come back BLOCKED.
+The tests cover the date engine (including the traps), delivery rulings,
+privacy redaction, mailbox admission, ledger tamper-detection, the dispute
+backstop, and precedent memory — with zero network calls, so they run on a
+fresh clone with no key at all. The eval exam runs the live agent against two
+contracts and scores it with a deterministic ROUGE metric (no LLM judge —
+fitting, for a product whose thesis is "don't trust the model's own reading"):
+the clean clause must gate `MATCH` and schedule; the planted words-vs-numerals
+trap must come back `BLOCKED`.
