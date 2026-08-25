@@ -51,28 +51,36 @@ def _reap(task: asyncio.Task) -> None:
             pass
 
 
+# An agent turn runs model calls and ledger writes through synchronous
+# clients, so it holds the event loop in stretches. Waiting on it inside the
+# request is therefore doubly wrong: the hosted proxy gives up after about a
+# minute, and an async timeout cannot fire reliably on a busy loop. The turn is
+# handed to a background task and the caller is answered immediately.
+SYNC_WAIT_SECONDS = float(os.getenv("REAPER_SYNC_WAIT_SECONDS", "0"))
+
+
 async def _detached_run(coro, *, obligation_id: int | None = None,
-                        wait: float = 25.0) -> dict | None:
+                        wait: float | None = None) -> dict | None:
     """Own an agent turn in a task that outlives the HTTP request.
 
-    A hosted proxy cuts a request off after roughly a minute, but an agent turn
-    can legitimately take several — and losing the connection must never lose
-    the work. The turn is therefore a background task: quick ones still return
-    their full report, slow ones answer "poll the ledger" while the run carries
-    on to completion.
+    Losing the connection must never lose the work, so the turn is a background
+    task and the ledger is how you learn the outcome. Set
+    REAPER_SYNC_WAIT_SECONDS to block for the full report instead — convenient
+    on a laptop, unsafe behind a proxy.
     """
     task = asyncio.create_task(coro)
     _detached.add(task)
     task.add_done_callback(_reap)
-    done, _pending = await asyncio.wait({task}, timeout=wait)
-    if task in done:
-        return task.result()
+    wait = SYNC_WAIT_SECONDS if wait is None else wait
+    if wait > 0:
+        done, _pending = await asyncio.wait({task}, timeout=wait)
+        if task in done:
+            return task.result()
     return {
         "accepted": True,
         "still_running": True,
-        "note": "the agent is still working; poll /obligations or "
+        "note": "the agent is working; poll /obligations or "
                 f"/obligations/{obligation_id}/receipts for the outcome",
-        "obligation": ledger.get_obligation(obligation_id) if obligation_id else None,
     }
 
 
@@ -555,13 +563,15 @@ class Decision(BaseModel):
 @api.post("/obligations/{obligation_id}/approval")
 async def deliver_approval(obligation_id: int, decision: Decision):
     """The human decision arrives — possibly after a full process restart."""
-    result = await _detached_run(
+    ob = ledger.get_obligation(obligation_id)
+    if ob is None:
+        raise HTTPException(404, "unknown obligation")
+    if ob["status"] != "AWAITING_APPROVAL" and             ledger.get_resume_pointer(obligation_id) is None:
+        raise HTTPException(409, "no pending approval for this obligation")
+    return await _detached_run(
         _deliver_decision(obligation_id, decision.approve, via={"channel": "app"}),
         obligation_id=obligation_id,
     )
-    if result is None:
-        raise HTTPException(409, "no pending approval for this obligation")
-    return result
 
 
 async def _deliver_decision(obligation_id: int, approve: bool, via: dict) -> dict | None:
