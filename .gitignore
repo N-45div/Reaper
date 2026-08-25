@@ -5,5 +5,6 @@ __pycache__/
 *.db
 data/*
 !data/contracts/
+!data/precedents/
 .pytest_cache/
 .adk/

@@ -1,0 +1,87 @@
+[
+  {
+    "vendor": "CloudCo Metrics",
+    "term_end": "2026-12-31",
+    "clause_text": "This Agreement shall automatically renew for successive twelve (12) month terms unless either party provides written notice of non-renewal at least sixty (60) days prior to the end of the then-current term. Notice of non-renewal must be delivered in writing to cancellations@cloudcometrics.test.",
+    "status_final": "VERIFIED",
+    "billing_stopped": true,
+    "notice_served": true,
+    "resolution": "fixture corpus: clean 60-day email clause anchored to term end; derives cleanly and, in the demo world, the vendor honoured the cancellation."
+  },
+  {
+    "vendor": "DataVault Pro",
+    "term_end": "2027-02-28",
+    "clause_text": "Upon expiration of the Initial Term, this Agreement will renew automatically for successive one-year periods unless Client delivers written notice of termination no later than ninety (90) days prior to the expiration of the then-current term. All termination notices must be sent to accounts@datavaultpro.test.",
+    "status_final": "REFUTED",
+    "billing_stopped": false,
+    "dispute_opened": true,
+    "notice_served": true,
+    "resolution": "fixture corpus: clean 90-day clause; in the demo world the vendor billed after a valid notice and the obligation went to dispute with the delivery receipt attached."
+  },
+  {
+    "vendor": "HostWave Systems",
+    "term_end": "2027-05-31",
+    "clause_text": "This Agreement renews automatically for additional one-year terms. Subscriber may opt out of renewal by providing written notice no later than sixty (90) days prior to the end of the then-current term, sent to support@hostwave.test.",
+    "resolution": "fixture corpus: the written word and the numeral disagree (sixty vs 90); this clause shape defeats deterministic derivation and requires human resolution."
+  },
+  {
+    "vendor": "Sterling Analytics Co.",
+    "term_end": "2026-09-30",
+    "clause_text": "This Agreement shall automatically renew for successive one-year periods unless the Customer provides written notice of non-renewal at least thirty (30) days prior to the end of the then-current term, delivered to renewals@sterlinganalytics.test.",
+    "resolution": "fixture corpus: clean 30-day email clause anchored to term end."
+  },
+  {
+    "vendor": "Northwind Facilities",
+    "term_end": "2027-03-31",
+    "clause_text": "This Agreement will renew automatically for successive one-year terms unless Tenant delivers written notice of non-renewal by registered post no later than forty-five (45) days prior to the expiration of the then-current term.",
+    "resolution": "fixture corpus: a 45-day clause that requires registered post; an email alone is a courtesy copy, not compliant service."
+  },
+  {
+    "vendor": "Ironclad Storage",
+    "term_end": "2027-06-30",
+    "clause_text": "Renewal is automatic for further one-year periods unless Customer sends written notice of termination by certified mail at least sixty (60) days prior to the end of the then-current term.",
+    "resolution": "fixture corpus: 60-day clause requiring certified mail; the printable evidence pack must travel by the required channel."
+  },
+  {
+    "vendor": "Meridian Software",
+    "term_end": "2026-11-30",
+    "clause_text": "This subscription renews automatically unless the Client provides written notice of cancellation delivered by courier no fewer than thirty (30) days before the expiration of the then-current term.",
+    "resolution": "fixture corpus: 30-day clause with courier delivery required."
+  },
+  {
+    "vendor": "Apex Hosting",
+    "term_end": "2027-01-31",
+    "clause_text": "The Agreement shall renew for successive annual periods unless either party gives written notice of non-renewal at least three (3) months prior to the end of the then-current term, addressed to accounts@apexhosting.test.",
+    "resolution": "fixture corpus: months-denominated notice period; calendar arithmetic must subtract months, not days."
+  },
+  {
+    "vendor": "Beacon Data",
+    "term_end": "2026-10-31",
+    "clause_text": "This Agreement automatically extends for one-year renewal periods unless Customer provides written non-renewal notice at least six (6) weeks before the expiration of the then-current term, sent to billing@beacondata.test.",
+    "resolution": "fixture corpus: weeks-denominated notice period."
+  },
+  {
+    "vendor": "Crestline SaaS",
+    "term_end": "2027-04-30",
+    "clause_text": "This Agreement renews automatically each year unless Customer delivers written notice of non-renewal at least ninety (90) days prior to each anniversary of the Effective Date.",
+    "resolution": "fixture corpus: the deadline is anchored to an anniversary date rather than the stated term end; the anchor is outside the engine's recognised forms and needs human review."
+  },
+  {
+    "vendor": "Drift Telecom",
+    "term_end": "2026-12-15",
+    "clause_text": "Either party may terminate this Agreement by providing sixty (60) days written notice to the other party at the addresses set out above.",
+    "resolution": "fixture corpus: a notice period with no renewal anchor at all; there is nothing to derive a renewal deadline from, so it cannot be scheduled deterministically."
+  },
+  {
+    "vendor": "Quantum Compute",
+    "term_end": "2027-08-31",
+    "clause_text": "This Agreement will renew for successive one-year terms unless Client gives written notice of non-renewal no later than thirty (60) days prior to the end of the then-current term, sent to ar@quantumcompute.test.",
+    "resolution": "fixture corpus: a second words-vs-numerals conflict shape (thirty vs 60); derivation must refuse to pick a side."
+  },
+  {
+    "vendor": "Vertex CRM",
+    "term_end": "2027-02-28",
+    "clause_text": "Subscriptions renew automatically for additional one-year terms unless the Customer submits a cancellation request through the vendor portal at least sixty (60) days prior to the end of the then-current term.",
+    "resolution": "fixture corpus: 60-day clause where notice must be submitted through the vendor's portal; email service alone is not compliant."
+  }
+]
