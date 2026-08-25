@@ -3,7 +3,7 @@
 
 from datetime import date
 
-from . import delivery, inbox, ledger, vision
+from . import delivery, inbox, ledger, precedent, vision
 from .date_engine import gate
 
 
@@ -37,6 +37,17 @@ def gate_and_schedule(
     # clause, and the ledger must say so from the moment of filing.
     ruling = delivery.classify(clause_text)
 
+    # Prior resolved obligations are recalled AFTER the gate has already ruled,
+    # so history can never move a verdict — it is context for the report. If
+    # the store is off, empty or unreachable, this records a miss and changes
+    # nothing about the filing.
+    prior = precedent.recall(
+        vendor=vendor,
+        clause_text=clause_text,
+        method=ruling.method,
+        engine_deadline=derivation.deadline.isoformat() if derivation.deadline else None,
+    )
+
     status = "SCHEDULED" if verdict == "MATCH" else "BLOCKED"
     oid = ledger.create_obligation(
         vendor=vendor,
@@ -55,6 +66,10 @@ def gate_and_schedule(
         "vendor": vendor, "clause": clause_text, "term_end": term_end,
         "llm_deadline": proposed_deadline,
     })
+    ledger.append_receipt(oid, "PRECEDENT_CONSULTED", _precedent_payload(
+        prior, vendor=vendor, clause_text=clause_text,
+        engine_deadline=derivation.deadline, delivery_method=ruling.method,
+    ))
     ledger.append_receipt(oid, "GATED", {
         "verdict": verdict,
         "engine_deadline": str(derivation.deadline),
@@ -63,6 +78,10 @@ def gate_and_schedule(
         "delivery_method": ruling.method,
         "email_compliant": ruling.email_compliant,
         "delivery_evidence": ruling.evidence,
+        "notice_period_value": derivation.period_value,
+        "notice_period_unit": derivation.period_unit,
+        "anchor": derivation.anchor,
+        "precedent": prior.get("summary"),
     })
     result = {
         "obligation_id": oid,
@@ -79,7 +98,40 @@ def gate_and_schedule(
             f"(\"{ruling.evidence}\"); an email alone is NOT a compliant notice "
             "for this contract"
         )
+    if prior["available"] and prior["matches"]:
+        result["precedent"] = prior["summary"]
+        if prior.get("warning"):
+            result["precedent_warning"] = prior["warning"]
+    elif not prior["available"] and prior.get("reason") != "disabled":
+        result["precedent"] = (
+            f"precedent memory unavailable ({prior.get('reason')}); "
+            "no prior history was read for this clause"
+        )
     return result
+
+
+def _precedent_payload(prior: dict, *, vendor: str, clause_text: str,
+                       engine_deadline, delivery_method) -> dict:
+    return {
+        "available": prior["available"],
+        "reason": prior.get("reason"),
+        "backend": prior.get("backend"),
+        "embedding_model": prior.get("embedding_model"),
+        "embedding_dim": prior.get("embedding_dim"),
+        "rows_scanned": prior.get("rows_scanned"),
+        "latency_ms": prior.get("latency_ms"),
+        "query": {
+            "vendor": vendor,
+            "clause_chars": len(clause_text or ""),
+            "engine_deadline": str(engine_deadline),
+            "delivery_method": delivery_method,
+        },
+        "matches": prior.get("matches", []),
+        "summary": prior.get("summary"),
+        "warning": prior.get("warning"),
+        "note": ("prior resolved obligations consulted before the gate verdict "
+                 "was filed; advisory only — precedent never changes a verdict"),
+    }
 
 
 def request_notice_approval(obligation_id: int, notice_summary: str) -> dict:
@@ -274,3 +326,45 @@ def get_obligation_status(obligation_id: int) -> dict:
     intact, _ = ledger.verify_chain(obligation_id)
     return {**ob, "receipts": len(ledger.get_receipts(obligation_id)),
             "chain_intact": intact}
+
+
+def recall_precedent(obligation_id: int) -> dict:
+    """Look up how clauses shaped like this one resolved before.
+
+    Advisory only. Precedent is prior history, never a verdict: nothing this
+    returns can change a gate ruling, a deadline, or a billing verdict. If the
+    precedent store is disabled or unreachable, that is reported plainly and
+    the obligation is unaffected.
+
+    Args:
+        obligation_id: The obligation whose clause should be matched.
+    """
+    ob = ledger.get_obligation(obligation_id)
+    if ob is None:
+        return {"error": f"no obligation {obligation_id}"}
+    prior = precedent.recall(
+        vendor=ob.get("vendor") or "",
+        clause_text=ob.get("clause_text") or "",
+        method=ob.get("notice_method"),
+        engine_deadline=ob.get("engine_deadline"),
+    )
+    ledger.append_receipt(obligation_id, "PRECEDENT_CONSULTED", _precedent_payload(
+        prior, vendor=ob.get("vendor") or "",
+        clause_text=ob.get("clause_text") or "",
+        engine_deadline=ob.get("engine_deadline"),
+        delivery_method=ob.get("notice_method"),
+    ))
+    out = {
+        "available": prior["available"],
+        "matches": prior["matches"],
+        "summary": prior["summary"],
+        "rows_scanned": prior.get("rows_scanned"),
+    }
+    if prior.get("warning"):
+        out["precedent_warning"] = prior["warning"]
+    if not prior["available"]:
+        out["note"] = (
+            f"precedent memory could not be read ({prior.get('reason')}); "
+            "this is a gap in context, not a finding about the contract"
+        )
+    return out

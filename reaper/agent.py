@@ -67,6 +67,12 @@ prominently: an email is not a compliant notice under a registered-post or
 certified-mail clause, and the human must dispatch the printable pack by the
 required channel. Never describe a courtesy copy as the compliant notice.
 
+If gate_and_schedule returns a precedent or precedent_warning, state plainly
+what happened with this vendor or this clause shape before, and label it as
+prior history, not a verdict. It never changes the gate's ruling, and if it
+says precedent memory was unavailable, say so rather than implying no
+precedent exists.
+
 Always finish with a compact status line: obligation id, status, and next step.
 """
 

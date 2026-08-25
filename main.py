@@ -550,8 +550,12 @@ async def _open_notice_window(obligation_id: int) -> dict:
 @api.post("/obligations/{obligation_id}/notice-window")
 async def notice_window_open(obligation_id: int):
     """Wake: the notice window is open (API trigger; the ticker does this itself)."""
-    if ledger.get_obligation(obligation_id) is None:
+    ob = ledger.get_obligation(obligation_id)
+    if ob is None:
         raise HTTPException(404, "unknown obligation")
+    if ob["status"] != "SCHEDULED":
+        raise HTTPException(409, f"notice window applies to SCHEDULED "
+                                 f"obligations (current: {ob['status']})")
     return await _detached_run(_open_notice_window(obligation_id),
                                obligation_id=obligation_id)
 
@@ -643,8 +647,12 @@ async def _process_invoice(obligation_id: int) -> dict:
 @api.post("/obligations/{obligation_id}/invoice-arrived")
 async def invoice_arrived(obligation_id: int):
     """Wake: the vendor's next-cycle invoice landed (API trigger; ticker does this itself)."""
-    if ledger.get_obligation(obligation_id) is None:
+    ob = ledger.get_obligation(obligation_id)
+    if ob is None:
         raise HTTPException(404, "unknown obligation")
+    if ob["status"] != "NOTICE_SENT":
+        raise HTTPException(409, f"invoice verification applies to NOTICE_SENT "
+                                 f"obligations (current: {ob['status']})")
     return await _detached_run(_process_invoice(obligation_id),
                                obligation_id=obligation_id)
 
@@ -703,6 +711,27 @@ async def receipts(obligation_id: int):
     intact, broken = ledger.verify_chain(obligation_id)
     return {"chain_intact": intact, "first_broken": broken,
             "receipts": ledger.get_receipts(obligation_id)}
+
+
+@api.get("/obligations/{obligation_id}/precedents")
+async def obligation_precedents(obligation_id: int):
+    """Advisory recall: how clauses shaped like this one resolved before.
+
+    Read-only over the BigQuery precedent store; the consultation itself is
+    hash-chained as a PRECEDENT_CONSULTED receipt. Never affects any verdict.
+    """
+    result = await asyncio.to_thread(tools.recall_precedent, obligation_id)
+    if "error" in result:
+        raise HTTPException(404, result["error"])
+    return result
+
+
+@api.get("/precedents/status")
+async def precedents_status():
+    """Health of the precedent store (BigQuery sandbox table)."""
+    from reaper import precedent
+
+    return await asyncio.to_thread(precedent.table_status)
 
 
 @api.get("/healthz")
