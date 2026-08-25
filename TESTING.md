@@ -50,6 +50,14 @@ Expect: obligation `1` for DataVault Pro, status **`SCHEDULED`**, gate verdict
 **`MATCH`** — the model's deadline and the date engine's independent
 derivation both read `2026-11-30`. The UI shows both readings side by side.
 
+> **If you see `BLOCKED` instead, that is a real result, not a broken demo.**
+> The gate compares two independent readings, and the model's arithmetic is not
+> deterministic. On the hosted instance, filing the CloudCo contract produced
+> exactly this: Gemini proposed `2026-11-02`, the engine derived `2026-11-01`
+> (`2026-12-31 - 60 days`), and Reaper refused to schedule. Open
+> `GET /obligations/{id}/receipts` and read the `GATED` receipt - it records
+> both readings and the trace. Blocking a one-day error is the product working.
+
 **2. Open the notice window.**
 
 ```bash
