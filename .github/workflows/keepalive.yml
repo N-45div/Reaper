@@ -1,0 +1,22 @@
+name: keepalive
+
+# Keeps the hosted demo warm so judges never hit a cold start.
+# Free-tier hosts idle out after ~15 minutes without traffic.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: ping /healthz
+        run: |
+          for i in 1 2 3; do
+            if curl -fsS --max-time 60 https://reaper-sxxs.onrender.com/healthz; then exit 0; fi
+            sleep 20
+          done
+          echo "healthz did not answer after 3 attempts" >&2
+          exit 1
