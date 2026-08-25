@@ -263,9 +263,12 @@ async def dashboard():
 
 @api.post("/demo/reset")
 async def demo_reset():
-    ledger.reset_all()
-    inbox.reset_world()
-    return {"ok": True}
+    # The wipe runs off the event loop and the response only says ok once the
+    # world verifiably reads empty — a film take must never start on a
+    # half-deleted stage.
+    result = await asyncio.to_thread(ledger.reset_all)
+    await asyncio.to_thread(inbox.reset_world)
+    return {"ok": True, "purged": result}
 
 
 async def _intake(text: str, source: dict | None = None) -> dict:

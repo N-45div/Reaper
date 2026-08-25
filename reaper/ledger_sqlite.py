@@ -182,7 +182,7 @@ def recent_activity(limit: int = 40) -> list[dict]:
         ]
 
 
-def reset_all() -> None:
+def reset_all() -> dict | None:
     """Demo reset: wipe all obligations, receipts and resume pointers."""
     with _connect() as conn:
         conn.execute("DELETE FROM receipts")

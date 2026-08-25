@@ -164,13 +164,34 @@ def clear_resume_pointer(obligation_id: int) -> None:
     _client().collection("pending_resume").document(str(obligation_id)).delete()
 
 
-def _purge(col_ref) -> None:
-    for doc in col_ref.stream():
-        for sub in doc.reference.collections():
-            _purge(sub)
-        doc.reference.delete()
+def _purge(col_ref) -> int:
+    """Delete a collection completely, subcollections first, in write batches.
+
+    Doc-by-doc deletes were slow enough that a caller's request could time out
+    while the purge was still running — leaving a half-eaten world with broken
+    chains. Batches keep the wipe fast, and the loop re-reads until the
+    collection truly streams empty.
+    """
+    deleted = 0
+    while True:
+        docs = list(col_ref.limit(300).stream())
+        if not docs:
+            return deleted
+        for doc in docs:
+            for sub in doc.reference.collections():
+                deleted += _purge(sub)
+        batch = _client().batch()
+        for doc in docs:
+            batch.delete(doc.reference)
+        batch.commit()
+        deleted += len(docs)
 
 
-def reset_all() -> None:
+def reset_all() -> dict:
+    counts = {}
     for name in ("obligations", "activity", "pending_resume", "meta"):
-        _purge(_client().collection(name))
+        counts[name] = _purge(_client().collection(name))
+    # verify: a reset that reports ok must actually read empty
+    leftovers = sum(1 for _ in _client().collection("obligations").limit(5).stream())
+    counts["verified_empty"] = leftovers == 0
+    return counts
