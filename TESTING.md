@@ -4,6 +4,17 @@ Everything below runs on a laptop with **only a free Gemini API key** — no
 billing account, no Google Cloud project, no Telegram, no mailbox. Those are
 optional live channels documented at the end.
 
+## The hosted instance (nothing to install)
+
+A live test instance runs at **https://reaper-sxxs.onrender.com** — the app UI
+is at `/app`, and it writes to the same Firestore ledger shown in the demo
+video. Compute is on Render's free tier; the evidence chain is on Google Cloud.
+Judges can exercise the whole arc there, including `POST /chaos/kill` to prove
+the approval pause survives a process death. The instance may take ~30 seconds
+to answer the first request if it has been idle.
+
+To run everything yourself instead:
+
 ## What you need
 
 - Python 3.11+ (3.12 recommended)

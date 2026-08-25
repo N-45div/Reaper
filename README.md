@@ -41,6 +41,10 @@ production slot for the wake ticker.
 autonomous arc, the durable pause, the hash-chained evidence ledger, and the
 trust boundaries, all as diagrams.
 
+**[Try the live demo →](https://reaper-sxxs.onrender.com)** — a hosted test
+instance. It writes to the same Firestore evidence ledger shown in the demo
+video. Compute runs on Render; the evidence chain lives on Google Cloud.
+
 **[Reproducible testing guide →](TESTING.md)** — spin-up, three guided
 walkthroughs (villain path, trap clause, photographed contract), the
 kill-the-process test, the 35-test suite, and the agent exam.
