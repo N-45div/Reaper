@@ -172,6 +172,42 @@ Two live cases scored with a deterministic ROUGE metric (no LLM judge): the
 clean clause must gate `MATCH` and schedule; the trap clause must come back
 `BLOCKED`. Expected result: **2/2 passed**.
 
+## Precedent memory (BigQuery)
+
+Optional, and OFF by default — no test or fresh clone ever touches Google
+Cloud. When enabled, every intake consults a BigQuery store of prior clause
+shapes (embedded with `gemini-embedding-001`, matched by `VECTOR_SEARCH`) and
+hash-chains the consultation as a `PRECEDENT_CONSULTED` receipt.
+
+```bash
+# one-time: create + seed the store from the committed corpus (13 clause shapes)
+.venv/Scripts/python scripts/seed_precedents.py --create --from-fixtures --replace --verify
+# then run the server with REAPER_PRECEDENT=bigquery
+```
+
+A real `--verify` transcript from this repo (2026-08-24):
+
+```
+loaded 13 rows (job b1cc6fd7..., replace)
+available=True rows_scanned=12 latency=2984ms
+  0.910  DataVault Pro          gate=MATCH     90 days
+  0.903  Crestline SaaS         gate=AMBIGUOUS -
+  0.896  CloudCo Metrics        gate=MATCH     60 days
+  warning: DataVault Pro billed anyway after a near-identical clause
+           (similarity 0.91) and the obligation went to dispute.
+           This is prior history, not a verdict.
+```
+
+On the hosted instance: `GET /precedents/status` shows the table health, and
+`GET /obligations/{id}/precedents` runs an advisory recall for any filed
+obligation (and receipts it).
+
+Honest disclosures: the store runs in the **BigQuery sandbox** (no billing
+account), where tables expire after 60 days — the seeder re-arms the expiry on
+each run; seeded rows are a labelled corpus (`source: "fixture"`), not
+customer history; and this feature was added after the demo video was
+recorded, so it appears here and on the hosted instance, not in the film.
+
 ## Optional live channels
 
 Each is independent; configure only what you want to verify. All settings are

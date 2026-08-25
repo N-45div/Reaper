@@ -183,10 +183,42 @@ makes honesty structural: falsifying the access log would break the same chain
 the dispute evidence depends on — cheating is self-destructive.
 
 Receipt kinds in the ledger today: `READ_AS`, `REDACTED`, `EXTRACTED`,
-`GATED`, `WOKE`, `APPROVAL_REQUESTED`, `APPROVAL_OFFERED`, `NOTICE_SENT`,
-`INVOICE_CHECKED`, `DISPUTE_OPENED`, `VENDOR_REPLY` — plus the chain-0 mailbox
-events. A vendor reply threaded onto our own Message-ID is recorded as
+`PRECEDENT_CONSULTED`, `GATED`, `WOKE`, `APPROVAL_REQUESTED`,
+`APPROVAL_OFFERED`, `NOTICE_SENT`, `INVOICE_CHECKED`, `DISPUTE_OPENED`,
+`DISPUTE_BACKSTOP`, `VENDOR_REPLY` — plus the chain-0 mailbox events. A vendor reply threaded onto our own Message-ID is recorded as
 `VENDOR_REPLY`: third-party corroboration captured automatically.
+
+## Precedent memory
+
+Reaper's second Google Cloud surface is institutional memory. Every clause it
+has gated — plus a committed corpus of labelled clause shapes — lives in a
+**BigQuery** table with a 768-dim `gemini-embedding-001` vector per row.
+During intake, after the date gate has already ruled, the new clause is
+embedded and matched by brute-force `VECTOR_SEARCH`:
+
+```mermaid
+flowchart LR
+    clause["new clause"] --> emb["gemini-embedding-001<br/>768-dim, L2-normalised"]
+    emb --> vs["BigQuery VECTOR_SEARCH<br/>cosine, brute force"]
+    vs --> shape["threshold · dedupe · rank<br/>(pure, tested code)"]
+    shape --> rec["PRECEDENT_CONSULTED receipt<br/>+ advisory line in the report"]
+    gate2["date gate verdict"] -. "already ruled —<br/>history cannot move it" .-> rec
+```
+
+Three rules keep it honest:
+
+- **Advisory only.** The lookup fires *after* the gate; a test asserts that a
+  97%-similar BLOCKED precedent cannot flip a clean clause off `MATCH`.
+- **Misses are receipted too.** If the store is off, empty, or unreachable,
+  the chain records `available: false` with the reason — "unavailable" and
+  "no precedent exists" are different facts.
+- **Corpus rows say they are corpus.** Seeded shapes carry `source: "fixture"`
+  and describe themselves as such; live outcomes carry `source: "ledger"` and
+  the terminal receipt hash they trace back to.
+
+The store runs in the BigQuery sandbox (no billing account): writes are load
+jobs (the sandbox forbids DML and streaming), and sandbox tables expire after
+60 days — the seeding script re-arms the expiry on every run.
 
 ## Trust boundaries
 
@@ -197,6 +229,7 @@ events. A vendor reply threaded onto our own Message-ID is recorded as
 | Draft the non-renewal notice | Send it — only a signed human approval releases it |
 | Read invoice documents | Rule on them — the billed-vs-expected check is arithmetic |
 | Ask to open a mailbox message | Open it silently — every open is a chain-0 receipt with a reason |
+| See how similar clauses resolved before | Let that history change a verdict — precedent is recalled *after* the gate rules, and is labelled prior history |
 
 ## Google Cloud deployment
 
@@ -206,6 +239,7 @@ flowchart TD
         gemini["Gemini API<br/>Gemini 3.5 Flash · Gemma 4 · vision"]
         fs[("Firestore<br/>obligations · receipts · activity · clock")]
         shell["Cloud Shell VM<br/>backend runs here in the demo"]
+        bq[("BigQuery<br/>precedent memory: clause shapes,<br/>outcomes, vector search")]
         sched["Cloud Scheduler → Pub/Sub<br/>production wake slot"]
     end
 
@@ -213,6 +247,7 @@ flowchart TD
 
     app <--> gemini
     app <--> fs
+    app -->|"advisory recall"| bq
     shell --- app
     sched -.->|"production path for the ticker"| app
 ```
@@ -236,5 +271,6 @@ Dockerfile in the repo root builds the container for that deployment.
 | `reaper/mailbox.py` | Owned-mailbox IMAP pipeline: headers → admission → hash → prefilter → intake |
 | `reaper/approvals.py` | Telegram long-poll approvals, token verification, denial logging |
 | `reaper/llm.py` | Quota-resilient Gemini access: retries, key rotation, model ladder |
+| `reaper/precedent.py` | BigQuery precedent memory: embeddings, vector recall, fail-open advisory |
 | `reaper/vision.py` / `reaper/triage.py` | Scanned-document reading · Gemma mailbox triage |
 | `reaper/clock.py` | The living calendar (persistent simulated time for the demo) |

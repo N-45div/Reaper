@@ -45,6 +45,15 @@ trust boundaries, all as diagrams.
 instance. It writes to the same Firestore evidence ledger shown in the demo
 video. Compute runs on Render; the evidence chain lives on Google Cloud.
 
+**Precedent memory (BigQuery).** Reaper also remembers. Every clause it
+gates is embedded with **gemini-embedding-001** and matched by vector search
+against a **BigQuery** store of prior clause shapes and their outcomes — so
+when a new contract looks like one that was BLOCKED, or like one where the
+vendor billed anyway, the report says so. Strictly advisory: the lookup runs
+*after* the deterministic gate has ruled, every consultation (or failed
+consultation) is hash-chained as a `PRECEDENT_CONSULTED` receipt, and history
+can never change a verdict.
+
 **[Reproducible testing guide →](TESTING.md)** — spin-up, three guided
 walkthroughs (villain path, trap clause, photographed contract), the
 kill-the-process test, the 35-test suite, and the agent exam.
