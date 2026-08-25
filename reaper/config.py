@@ -34,4 +34,24 @@ MODEL_LADDER = [m.strip() for m in os.getenv(
 TRIAGE_MODEL = os.getenv("REAPER_TRIAGE_MODEL", "gemma-4-26b-a4b-it")
 GCP_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "reaper-n45div")
 LEDGER_BACKEND = os.getenv("REAPER_LEDGER", "sqlite").lower()
+
+# --- Precedent memory (BigQuery, optional) -------------------------------
+# OFF unless explicitly enabled: a fresh clone, CI, and every test must never
+# reach Google Cloud. "off" makes precedent.recall() a pure no-op.
+PRECEDENT_BACKEND = os.getenv("REAPER_PRECEDENT", "off").lower()   # off | bigquery
+BQ_DATASET = os.getenv("REAPER_BQ_DATASET", "reaper_precedents")
+BQ_TABLE = os.getenv("REAPER_BQ_TABLE", "precedents")
+BQ_LOCATION = os.getenv("REAPER_BQ_LOCATION", "US")
+EMBED_MODEL = os.getenv("REAPER_EMBED_MODEL", "gemini-embedding-001")
+EMBED_DIM = int(os.getenv("REAPER_EMBED_DIM", "768"))
+# Must be IDENTICAL at seed time and query time: this is clause-vs-clause
+# matching, which is symmetric. Mixing RETRIEVAL_DOCUMENT with RETRIEVAL_QUERY
+# would degrade retrieval silently.
+EMBED_TASK = os.getenv("REAPER_EMBED_TASK", "SEMANTIC_SIMILARITY")
+EMBED_MAX_CHARS = int(os.getenv("REAPER_EMBED_MAX_CHARS", "6000"))
+PRECEDENT_TOP_K = int(os.getenv("REAPER_PRECEDENT_TOP_K", "3"))
+PRECEDENT_MAX_MATCHES = int(os.getenv("REAPER_PRECEDENT_MAX_MATCHES", "3"))
+PRECEDENT_MIN_SIMILARITY = float(os.getenv("REAPER_PRECEDENT_MIN_SIMILARITY", "0.72"))
+PRECEDENT_WARN_SIMILARITY = float(os.getenv("REAPER_PRECEDENT_WARN_SIMILARITY", "0.80"))
+PRECEDENT_TIMEOUT_S = float(os.getenv("REAPER_PRECEDENT_TIMEOUT_S", "6"))
 APP_NAME = "reaper"
