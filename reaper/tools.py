@@ -233,6 +233,39 @@ def open_dispute(obligation_id: int, dispute_text: str) -> dict:
     return {"disputed": True, "evidence_hash": evidence["hash"], **delivery}
 
 
+def ensure_dispute_filed(obligation_id: int) -> dict | None:
+    """Backstop: a REFUTED verdict must never be left unfiled.
+
+    Filing the dispute is the agent's own next step, but an agent turn can end
+    early — model quota, a restart, a plan cut short. The verdict itself is
+    arithmetic, so its consequence is not a judgement call: if an obligation is
+    REFUTED, has a delivery receipt, and carries no dispute yet, the dispute is
+    filed here and the chain records that the backstop did it, not the model.
+
+    Returns None when nothing needed doing.
+    """
+    ob = ledger.get_obligation(obligation_id)
+    if ob is None or ob["status"] != "REFUTED":
+        return None
+    kinds = {r["kind"] for r in ledger.get_receipts(obligation_id)}
+    if "DISPUTE_OPENED" in kinds or "NOTICE_SENT" not in kinds:
+        return None
+    result = open_dispute(
+        obligation_id,
+        "This charge was raised after a valid notice of non-renewal was served "
+        "within the contractual window. The attached delivery receipt evidences "
+        "that service. We dispute the charge in full and request its reversal.",
+    )
+    if not result.get("disputed"):
+        return result
+    ledger.append_receipt(obligation_id, "DISPUTE_BACKSTOP", {
+        "note": "the agent's run ended before filing; a refuted verdict is "
+                "arithmetic, so the dispute was filed deterministically",
+        "evidence_hash": result.get("evidence_hash"),
+    })
+    return result
+
+
 def get_obligation_status(obligation_id: int) -> dict:
     """Fetch an obligation's current state and receipt count."""
     ob = ledger.get_obligation(obligation_id)

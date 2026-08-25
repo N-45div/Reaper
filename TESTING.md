@@ -154,7 +154,7 @@ hidden — never the values.
 .venv/Scripts/python -m pytest tests -q
 ```
 
-**35 deterministic tests** — no network, no API key needed — covering the
+**39 deterministic tests** — no network, no API key needed — covering the
 date engine (word-vs-numeral conflicts, renewal-term exclusion, anchor
 handling), delivery-method classification, privacy redaction
 (Luhn/Verhoeff validation), mailbox admission rules, and ledger hash-chain

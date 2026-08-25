@@ -20,7 +20,7 @@ from google.adk.sessions import DatabaseSessionService
 from google.genai import types
 from pydantic import BaseModel
 
-from reaper import approvals, clock, inbox, ledger, llm, mailbox, privacy, vision
+from reaper import approvals, clock, inbox, ledger, llm, mailbox, privacy, tools, vision
 from reaper.agent import app as adk_app
 from reaper.config import APP_NAME, DB_URL
 from reaper.triage import triage_contract
@@ -32,6 +32,48 @@ WAKE_LEAD_DAYS = int(os.getenv("REAPER_WAKE_LEAD_DAYS", "7"))
 TICK_SECONDS = int(os.getenv("REAPER_TICK_SECONDS", "6"))
 runner: Runner | None = None
 _in_flight: set[int] = set()
+_detached: set[asyncio.Task] = set()
+
+
+def _reap(task: asyncio.Task) -> None:
+    """Retire a detached run and make sure a failure is never silent."""
+    _detached.discard(task)
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        try:
+            ledger.log_access("RUN_INCOMPLETE", {
+                "error": type(exc).__name__,
+                "note": "detached run failed; the ledger holds the true state",
+            })
+        except Exception:
+            pass
+
+
+async def _detached_run(coro, *, obligation_id: int | None = None,
+                        wait: float = 25.0) -> dict | None:
+    """Own an agent turn in a task that outlives the HTTP request.
+
+    A hosted proxy cuts a request off after roughly a minute, but an agent turn
+    can legitimately take several — and losing the connection must never lose
+    the work. The turn is therefore a background task: quick ones still return
+    their full report, slow ones answer "poll the ledger" while the run carries
+    on to completion.
+    """
+    task = asyncio.create_task(coro)
+    _detached.add(task)
+    task.add_done_callback(_reap)
+    done, _pending = await asyncio.wait({task}, timeout=wait)
+    if task in done:
+        return task.result()
+    return {
+        "accepted": True,
+        "still_running": True,
+        "note": "the agent is still working; poll /obligations or "
+                f"/obligations/{obligation_id}/receipts for the outcome",
+        "obligation": ledger.get_obligation(obligation_id) if obligation_id else None,
+    }
 
 
 async def _ticker():
@@ -502,7 +544,8 @@ async def notice_window_open(obligation_id: int):
     """Wake: the notice window is open (API trigger; the ticker does this itself)."""
     if ledger.get_obligation(obligation_id) is None:
         raise HTTPException(404, "unknown obligation")
-    return await _open_notice_window(obligation_id)
+    return await _detached_run(_open_notice_window(obligation_id),
+                               obligation_id=obligation_id)
 
 
 class Decision(BaseModel):
@@ -512,8 +555,10 @@ class Decision(BaseModel):
 @api.post("/obligations/{obligation_id}/approval")
 async def deliver_approval(obligation_id: int, decision: Decision):
     """The human decision arrives — possibly after a full process restart."""
-    result = await _deliver_decision(obligation_id, decision.approve,
-                                     via={"channel": "app"})
+    result = await _detached_run(
+        _deliver_decision(obligation_id, decision.approve, via={"channel": "app"}),
+        obligation_id=obligation_id,
+    )
     if result is None:
         raise HTTPException(409, "no pending approval for this obligation")
     return result
@@ -578,6 +623,9 @@ async def _process_invoice(obligation_id: int) -> dict:
         text=f"VERIFY. The next invoice arrived for obligation {obligation_id}. "
              "Check it and act accordingly.",
     )
+    # A refuted verdict is arithmetic, so it must not depend on the agent
+    # getting one more turn: file the dispute if the run ended without it.
+    await asyncio.to_thread(tools.ensure_dispute_filed, obligation_id)
     return {"report": result["final_text"], "degraded": result["degraded"],
             "obligation": ledger.get_obligation(obligation_id)}
 
@@ -587,7 +635,8 @@ async def invoice_arrived(obligation_id: int):
     """Wake: the vendor's next-cycle invoice landed (API trigger; ticker does this itself)."""
     if ledger.get_obligation(obligation_id) is None:
         raise HTTPException(404, "unknown obligation")
-    return await _process_invoice(obligation_id)
+    return await _detached_run(_process_invoice(obligation_id),
+                               obligation_id=obligation_id)
 
 
 @api.get("/clock")
