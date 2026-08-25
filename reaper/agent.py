@@ -76,18 +76,36 @@ precedent exists.
 Always finish with a compact status line: obligation id, status, and next step.
 """
 
+def _offload(fn):
+    """Run a heavy synchronous tool in a worker thread.
+
+    Tool bodies make blocking calls — Gemini vision, BigQuery, SMTP, Firestore.
+    Run on the event loop they freeze the whole server, and a hosted health
+    check that cannot be answered reads as a dead instance. The thread keeps
+    the loop breathing while the tool works; names, signatures and docstrings
+    are preserved so the model-facing declarations do not change.
+    """
+    import asyncio
+    import functools
+
+    @functools.wraps(fn)
+    async def run_in_thread(**kwargs):
+        return await asyncio.to_thread(fn, **kwargs)
+    return run_in_thread
+
+
 root_agent = LlmAgent(
     name="reaper",
     model=RotatingGemini(model=MODEL),
     description="Autonomous contract-renewal obligation agent",
     instruction=INSTRUCTION,
     tools=[
-        tools.gate_and_schedule,
+        _offload(tools.gate_and_schedule),
         LongRunningFunctionTool(func=tools.request_notice_approval),
-        tools.send_notice,
-        tools.check_invoice,
-        tools.open_dispute,
-        tools.get_obligation_status,
+        _offload(tools.send_notice),
+        _offload(tools.check_invoice),
+        _offload(tools.open_dispute),
+        _offload(tools.get_obligation_status),
     ],
 )
 
