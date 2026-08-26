@@ -467,6 +467,17 @@ async def demo_reset():
             cancelled += 1
     if cancelled:
         await asyncio.sleep(0.2)  # let cancellations land before the wipe
+    # Any request still sitting on the owner's phone belongs to the world that
+    # is about to be deleted. Retire it now, while its record still exists -
+    # otherwise it stays tappable forever and the tap is met with a refusal
+    # that looks like a broken product instead of a stale message.
+    try:
+        for ob in await asyncio.to_thread(ledger.list_obligations):
+            if ob.get("status") == "AWAITING_APPROVAL":
+                await approvals.supersede(
+                    ob["id"], "This run has ended. A new request will follow.")
+    except Exception:
+        pass
     # The wipe runs off the event loop and the response only says ok once the
     # world verifiably reads empty — a take must never start on a
     # half-deleted stage.

@@ -59,12 +59,21 @@ async def notify_pending(obligation: dict, receipt_hash: str | None = None) -> b
         [{"text": "✓ Sign — send the notice", "callback_data": f"d:{oid}:{token}:y"}],
         [{"text": "✗ Decline", "callback_data": f"d:{oid}:{token}:n"}],
     ]}
+    await supersede(oid)   # only one request may be live on the phone at a time
     try:
         async with aiohttp.ClientSession() as s:
             async with s.post(_api("sendMessage"), json={
                 "chat_id": CHAT_ID, "text": text, "reply_markup": keyboard,
             }, timeout=aiohttp.ClientTimeout(total=20)) as r:
-                ok = (await r.json()).get("ok", False)
+                body = await r.json()
+                ok = body.get("ok", False)
+                if ok:
+                    # Remember the message so it can be retired later: an old
+                    # request left tappable is a trap - the tap is refused for
+                    # a reason that is true and tells the human nothing.
+                    mid = (body.get("result") or {}).get("message_id")
+                    if mid:
+                        ledger.set_meta(f"approval_msg_{oid}", str(mid))
         if ok:
             ledger.append_receipt(oid, "APPROVAL_OFFERED", {
                 "channel": "telegram", "chat_id": CHAT_ID,
@@ -82,6 +91,30 @@ async def notify_pending(obligation: dict, receipt_hash: str | None = None) -> b
         except Exception:
             pass
         return False
+
+
+async def supersede(oid: int, note: str = "This request is no longer active.") -> None:
+    """Retire the request currently on the phone for this obligation.
+
+    A message with buttons stays tappable forever. Once its decision has been
+    taken - or the world it belonged to is gone - tapping it can only produce a
+    refusal, which reads as a broken product rather than a stale message. So
+    the message says so itself.
+    """
+    if not configured():
+        return
+    mid = ledger.get_meta(f"approval_msg_{oid}")
+    if not mid:
+        return
+    try:
+        async with aiohttp.ClientSession() as s:
+            await s.post(_api("editMessageText"), json={
+                "chat_id": CHAT_ID, "message_id": int(mid),
+                "text": "Reaper - obligation No.%04d\n%s" % (oid, note),
+            }, timeout=aiohttp.ClientTimeout(total=15))
+    except Exception:
+        pass  # a message that cannot be edited is not worth failing a run over
+    ledger.set_meta(f"approval_msg_{oid}", "")
 
 
 def _parse(data: str) -> tuple[int, str, bool] | None:
@@ -133,6 +166,7 @@ async def _handle_callback(session: aiohttp.ClientSession, cq: dict, decide) -> 
     result = await decide(oid, approve, {"channel": "telegram", "chat_id": from_chat})
     verdict = ("nothing was pending" if result is None
                else "notice sent ✓" if approve else "declined — nothing sent")
+    await supersede(oid, f"Signed. {verdict}")
     await session.post(_api("sendMessage"), json={
         "chat_id": CHAT_ID,
         "text": f"Obligation №{oid:04d}: {verdict}",
