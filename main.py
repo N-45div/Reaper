@@ -281,9 +281,29 @@ async def _run(session_id: str, *, text: str | None = None,
         if invocation_id:
             kwargs["invocation_id"] = invocation_id
         try:
+            events = 0
             async for event in runner.run_async(**kwargs):
+                events += 1
                 pending = _pending_approval(event) or pending
                 final_text = _final_text(event) or final_text
+            if events == 0 or (pending is None and not final_text):
+                # A turn that yields nothing at all is not success. It has
+                # happened silently - no exception, no output - and without
+                # this record there is nothing to debug but a stuck status.
+                try:
+                    ledger.log_access("RUN_EMPTY", {
+                        "session": use_session,
+                        "events": events,
+                        "model": llm.current_model(),
+                        "key_index": llm.current_bucket()[0],
+                        "note": "the model produced no usable turn",
+                    })
+                except Exception:
+                    pass
+                if attempt < tries - 1:
+                    llm.rotate()   # a model that says nothing is not the one
+                    adk_app.root_agent.model.model = llm.current_model()
+                    continue
             degraded = None
             used_session = use_session
             break
