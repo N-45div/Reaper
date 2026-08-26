@@ -711,7 +711,13 @@ def calendar_feed():
 
 async def _open_notice_window(obligation_id: int) -> dict:
     ob = await asyncio.to_thread(ledger.get_obligation, obligation_id)
-    session_id = f"ob-{obligation_id}"
+    # Each wake gets its own session. Reusing one name across attempts meant a
+    # run that died left the stored session ahead of what the next run loaded,
+    # and every later wake failed on "the session has been modified in storage"
+    # - a first failure that quietly poisoned all the ones after it. Which
+    # session actually holds the pause is recorded in the resume pointer, so
+    # the durable approval still comes back to exactly the right place.
+    session_id = f"ob-{obligation_id}-{uuid.uuid4().hex[:8]}"
     result = await _run(
         session_id,
         text=f"NOTICE. The notice window is open for obligation {obligation_id} "
@@ -833,7 +839,7 @@ async def _deliver_decision(obligation_id: int, approve: bool, via: dict) -> dic
 
 async def _process_invoice(obligation_id: int) -> dict:
     result = await _run(
-        f"verify-{obligation_id}",
+        f"verify-{obligation_id}-{uuid.uuid4().hex[:8]}",
         text=f"VERIFY. The next invoice arrived for obligation {obligation_id}. "
              "Check it and act accordingly.",
     )
