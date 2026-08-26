@@ -186,7 +186,16 @@ async def _ticker():
                                     raise
                     elif ob["status"] == "NOTICE_SENT":
                         term_end = date.fromisoformat(ob["term_end"])
-                        if today > term_end:
+                        # The next-cycle invoice is checked once. Without this
+                        # the wake refires every tick while the verdict settles,
+                        # and the register fills with the same reading over and
+                        # over - true records, but a chain that repeats itself
+                        # reads as noise rather than evidence.
+                        seen_invoice = any(
+                            r["kind"] == "INVOICE_CHECKED"
+                            for r in await asyncio.to_thread(
+                                ledger.get_receipts, oid))
+                        if today > term_end and not seen_invoice:
                             _in_flight.add(oid)
                             await asyncio.to_thread(
                                 ledger.append_receipt, oid, "WOKE", {
