@@ -140,6 +140,7 @@ async def _ticker():
                             # no exception, no degraded flag. The ledger is the
                             # truth: a wake that left the obligation SCHEDULED
                             # did not work, whatever the run reported.
+                            _docket_changed()
                             after = await asyncio.to_thread(ledger.get_obligation, oid)
                             stuck = after is not None and after["status"] == "SCHEDULED"
                             if r.get("degraded") or stuck:
@@ -270,6 +271,7 @@ async def _run(session_id: str, *, text: str | None = None,
         parts=parts if parts is not None else [types.Part(text=text)],
     )
 
+    _docket_changed()
     final_text, pending, degraded, used_session = None, None, None, session_id
     # Quota errors are retried HERE, inside the turn, stepping keys and then
     # the model ladder — not deferred to a later tick. A wake that waits for
@@ -435,6 +437,7 @@ async def demo_reset():
     # The wipe runs off the event loop and the response only says ok once the
     # world verifiably reads empty — a take must never start on a
     # half-deleted stage.
+    _docket_changed()
     result = await asyncio.to_thread(ledger.reset_all)
     await asyncio.to_thread(inbox.reset_world)
     return {"ok": True, "purged": result, "cancelled_runs": cancelled}
@@ -915,9 +918,31 @@ async def chaos_kill():
     return {"dying": True, "note": "process exiting; durable state will survive"}
 
 
+# The dashboard asks for the docket about once a second, and every ask used to
+# be a fresh read of every obligation. Over a long demo that is tens of
+# thousands of reads for a list that changes a few times a minute - enough to
+# spend a day's free-tier Firestore allowance and take the ledger down with it.
+# A one-second cache changes nothing anyone can see and removes the problem.
+_DOCKET_TTL_S = float(os.getenv("REAPER_DOCKET_TTL_S", "1.0"))
+_docket_cache: dict = {"at": 0.0, "rows": None}
+
+
+def _docket() -> list:
+    now = time.monotonic()
+    if _docket_cache["rows"] is None or now - _docket_cache["at"] > _DOCKET_TTL_S:
+        _docket_cache["rows"] = ledger.list_obligations()
+        _docket_cache["at"] = now
+    return _docket_cache["rows"]
+
+
+def _docket_changed() -> None:
+    """Anything that writes the ledger invalidates the cached docket."""
+    _docket_cache["rows"] = None
+
+
 @api.get("/obligations")
 def obligations():
-    return ledger.list_obligations()
+    return _docket()
 
 
 @api.get("/obligations/{obligation_id}/receipts")
