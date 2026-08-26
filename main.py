@@ -414,11 +414,13 @@ async def _intake(text: str, source: dict | None = None) -> dict:
     # any model sees a byte. The contract profile keeps email addresses (the
     # notice depends on one) but cards, Aadhaar, PAN, GSTIN, IBAN, IFSC,
     # passports and phone numbers never leave the machine.
-    red = privacy.redact(text, keep_emails=True)
+    red = await asyncio.to_thread(privacy.redact, text, keep_emails=True)
 
     # Gemma triage: skip the expensive agent run when there is no renewal
     # clause at all. Fails open — triage never blocks a real contract.
-    triage = triage_contract(red.text)
+    # It is a blocking HTTP call, so it belongs in a worker thread: seconds
+    # spent here on the event loop are seconds the health check goes unanswered.
+    triage = await asyncio.to_thread(triage_contract, red.text)
     redaction = {"profile": "document", "masked": red.total,
                  "summary": red.summary()}
     if triage["ok"] and not triage["has_renewal"]:
@@ -426,9 +428,9 @@ async def _intake(text: str, source: dict | None = None) -> dict:
                 "redaction": redaction,
                 "report": "Triage: no auto-renewal clause found in this "
                           f"document ({triage['model']}). Nothing to schedule.",
-                "obligations": ledger.list_obligations()}
+                "obligations": await asyncio.to_thread(ledger.list_obligations)}
 
-    before = {o["id"] for o in ledger.list_obligations()}
+    before = {o["id"] for o in await asyncio.to_thread(ledger.list_obligations)}
     session_id = f"intake-{uuid.uuid4().hex[:8]}"
     result = await _run(
         session_id,
@@ -436,19 +438,21 @@ async def _intake(text: str, source: dict | None = None) -> dict:
              f"and gate-schedule it.\n\n--- CONTRACT ---\n{red.text}",
     )
     # Provenance of the reading and of the masking both belong in the chain.
-    for ob in ledger.list_obligations():
+    for ob in await asyncio.to_thread(ledger.list_obligations):
         if ob["id"] not in before:
             if source:
-                ledger.append_receipt(ob["id"], "READ_AS", source)
-            ledger.append_receipt(ob["id"], "REDACTED", {
-                "profile": "document", "masked": red.total,
-                "kinds": red.counts,
-                "note": "models received the masked text only",
-            })
+                await asyncio.to_thread(
+                    ledger.append_receipt, ob["id"], "READ_AS", source)
+            await asyncio.to_thread(
+                ledger.append_receipt, ob["id"], "REDACTED", {
+                    "profile": "document", "masked": red.total,
+                    "kinds": red.counts,
+                    "note": "models received the masked text only",
+                })
     return {"session_id": session_id, "report": result["final_text"],
             "triage": triage, "degraded": result["degraded"],
             "redaction": redaction,
-            "obligations": ledger.list_obligations()}
+            "obligations": await asyncio.to_thread(ledger.list_obligations)}
 
 
 def _read_contract(filename: str, raw: bytes, content_type: str) -> tuple[str, dict]:
@@ -491,7 +495,8 @@ def _read_contract(filename: str, raw: bytes, content_type: str) -> tuple[str, d
 @api.post("/contracts/upload")
 async def upload_contract(file: UploadFile):
     raw = await file.read()
-    text, source = _read_contract(file.filename or "", raw, file.content_type or "")
+    text, source = await asyncio.to_thread(
+        _read_contract, file.filename or "", raw, file.content_type or "")
     if not text.strip():
         why = source.get("error") or f"nothing readable via {source['how']}"
         raise HTTPException(422, f"could not read any contract text from that file: {why}")
@@ -511,7 +516,7 @@ async def demo_contract(name: str):
 
 
 @api.get("/obligations/{obligation_id}/invoice")
-async def invoice_document(obligation_id: int):
+def invoice_document(obligation_id: int):
     """The invoice document the agent read, exactly as the vendor sent it."""
     ob = ledger.get_obligation(obligation_id)
     if ob is None:
@@ -539,7 +544,7 @@ async def quota():
 
 
 @api.get("/activity")
-async def activity():
+def activity():
     return [e for e in ledger.recent_activity()
             if e.get("kind") not in _DIAG_KINDS]
 
@@ -557,7 +562,7 @@ async def reoffer_approval(obligation_id: int):
 
 
 @api.get("/access")
-async def access_log():
+def access_log():
     """What the mailbox watcher looked at, and — the point — what it refused.
 
     The denominator is the claim: unseen counted, declined hashed, opened
@@ -592,7 +597,7 @@ async def access_log():
 
 
 @api.get("/obligations/{obligation_id}/pack")
-async def evidence_pack(obligation_id: int):
+def evidence_pack(obligation_id: int):
     """The printable evidence pack: obligation, clause, gate, full chain."""
     ob = ledger.get_obligation(obligation_id)
     if ob is None:
@@ -647,7 +652,7 @@ async def evidence_pack(obligation_id: int):
 
 
 @api.get("/briefing")
-async def briefing_deck():
+def briefing_deck():
     """A board-ready briefing the agent writes from its own ledger."""
     from fastapi.responses import HTMLResponse
     from reaper import briefing, deck
@@ -657,7 +662,7 @@ async def briefing_deck():
 
 
 @api.get("/calendar.ics")
-async def calendar_feed():
+def calendar_feed():
     """Obligation deadlines as an iCalendar feed — subscribe from any calendar."""
     from fastapi.responses import Response
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Reaper//obligations//EN",
@@ -830,7 +835,7 @@ async def invoice_arrived(obligation_id: int):
 
 
 @api.get("/clock")
-async def get_clock():
+def get_clock():
     return {"ledger_date": clock.today().isoformat(),
             "offset_days": clock.offset_days(),
             "wake_lead_days": WAKE_LEAD_DAYS}
@@ -874,12 +879,12 @@ async def chaos_kill():
 
 
 @api.get("/obligations")
-async def obligations():
+def obligations():
     return ledger.list_obligations()
 
 
 @api.get("/obligations/{obligation_id}/receipts")
-async def receipts(obligation_id: int):
+def receipts(obligation_id: int):
     intact, broken = ledger.verify_chain(obligation_id)
     return {"chain_intact": intact, "first_broken": broken,
             "receipts": ledger.get_receipts(obligation_id)}
