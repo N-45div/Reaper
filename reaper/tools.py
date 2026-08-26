@@ -163,17 +163,24 @@ def send_notice(obligation_id: int, notice_text: str) -> dict:
         return {"error": f"no obligation {obligation_id}"}
 
     # HARD GUARD, not an instruction: no notice leaves without a human
-    # signature on the record. A degraded or fallback model that skips
-    # request_notice_approval is refused here, mechanically.
-    approved = any(r["kind"] == "APPROVED" for r in ledger.get_receipts(obligation_id))
-    if not approved:
+    # signature on the record AND a run that is actually at the approval step.
+    # A degraded or fallback model that skips request_notice_approval — or a
+    # turn from another phase reaching for this tool — is refused mechanically.
+    chain = ledger.get_receipts(obligation_id)
+    approved = [r for r in chain if r["kind"] == "APPROVED"]
+    if not approved or ob.get("status") != "AWAITING_APPROVAL":
         ledger.log_access("SEND_REFUSED", {
             "obligation_id": obligation_id,
-            "reason": "no human approval on record",
+            "status_seen": ob.get("status"),
+            "chain_kinds": [r["kind"] for r in chain][-8:],
+            "reason": ("no human approval on record" if not approved
+                       else "obligation is not awaiting approval"),
         })
-        return {"error": "refused: no human approval on record for this "
-                         "obligation. Call request_notice_approval and wait "
-                         "for the human decision before sending anything."}
+        return {"error": "refused: this obligation has no human approval on "
+                         "record at the approval step. Call "
+                         "request_notice_approval and wait for the human "
+                         "decision before sending anything."}
+    approval_hash = approved[-1]["hash"]
 
     ruling = delivery.classify(ob.get("clause_text") or "")
 
@@ -200,6 +207,7 @@ def send_notice(obligation_id: int, notice_text: str) -> dict:
     if record is None:
         record = inbox.deliver_notice(ob["vendor"], notice_text, obligation_id)
         record["channel"] = "simulated"
+    record["approved_by_receipt"] = approval_hash
     record["delivery_method_required"] = ruling.method
     record["email_compliant"] = ruling.email_compliant
     if not ruling.email_compliant:

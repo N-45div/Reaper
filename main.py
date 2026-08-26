@@ -320,12 +320,22 @@ async def dashboard():
 
 @api.post("/demo/reset")
 async def demo_reset():
+    # A reset is a WORLD BOUNDARY. Any agent turn still in flight belongs to
+    # the old world; letting it finish would let it write into the new one
+    # (a resumed notice once landed on a freshly-filed obligation this way).
+    cancelled = 0
+    for task in list(_detached):
+        if not task.done():
+            task.cancel()
+            cancelled += 1
+    if cancelled:
+        await asyncio.sleep(0.2)  # let cancellations land before the wipe
     # The wipe runs off the event loop and the response only says ok once the
-    # world verifiably reads empty — a film take must never start on a
+    # world verifiably reads empty — a take must never start on a
     # half-deleted stage.
     result = await asyncio.to_thread(ledger.reset_all)
     await asyncio.to_thread(inbox.reset_world)
-    return {"ok": True, "purged": result}
+    return {"ok": True, "purged": result, "cancelled_runs": cancelled}
 
 
 async def _intake(text: str, source: dict | None = None) -> dict:
