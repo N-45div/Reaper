@@ -114,6 +114,10 @@ async def _ticker():
                         })
                         r = await _open_notice_window(oid)
                         if r.get("degraded"):
+                            ledger.log_access("WAKE_DEGRADED", {
+                                "obligation_id": oid, "fails": fails + 1,
+                                "reason": str(r.get("degraded"))[:160],
+                            })
                             wake_backoff[oid] = (time.monotonic() + min(600, 60 * (2 ** fails)), fails + 1)
                         else:
                             wake_backoff.pop(oid, None)
@@ -206,23 +210,46 @@ async def _run(session_id: str, *, text: str | None = None,
         role="user",
         parts=parts if parts is not None else [types.Part(text=text)],
     )
-    kwargs = {"user_id": USER_ID, "session_id": session_id, "new_message": content}
-    if invocation_id:
-        kwargs["invocation_id"] = invocation_id
 
-    final_text, pending, degraded = None, None, None
+    final_text, pending, degraded, used_session = None, None, None, session_id
     # Quota errors are retried HERE, inside the turn, stepping keys and then
     # the model ladder — not deferred to a later tick. A wake that waits for
     # the next heartbeat leaves a human-visible pause with nothing pending,
     # which is exactly the window a crash turned into a stranded approval.
+    #
+    # Fresh turns retry on a FRESH session: an invocation that died mid-flight
+    # can leave the old session un-runnable, and retrying into it would fail
+    # every attempt no matter how much quota the next key has. Resumes never
+    # switch sessions — the pointer names the one durable pause.
     for attempt in range(4):
+        use_session = session_id if (invocation_id or attempt == 0)             else f"{session_id}.r{attempt}"
+        if use_session != session_id:
+            try:
+                await runner.session_service.create_session(
+                    app_name=APP_NAME, user_id=USER_ID, session_id=use_session
+                )
+            except Exception:
+                pass
+        kwargs = {"user_id": USER_ID, "session_id": use_session,
+                  "new_message": content}
+        if invocation_id:
+            kwargs["invocation_id"] = invocation_id
         try:
             async for event in runner.run_async(**kwargs):
                 pending = _pending_approval(event) or pending
                 final_text = _final_text(event) or final_text
             degraded = None
+            used_session = use_session
             break
         except Exception as exc:  # model quota/transient errors mid-run
+            # The failure is a fact worth keeping: which attempt, which error.
+            try:
+                ledger.log_access("RUN_ATTEMPT_FAILED", {
+                    "session": use_session, "attempt": attempt,
+                    "error": f"{type(exc).__name__}: {exc}"[:200],
+                })
+            except Exception:
+                pass
             if llm.is_quota_error(exc) and attempt < 3:
                 llm.rotate()  # next key; after a full lap, the next model down
                 adk_app.root_agent.model.model = llm.current_model()
@@ -235,7 +262,8 @@ async def _run(session_id: str, *, text: str | None = None,
                 "actions are persisted in the ledger and the session is resumable"
             )
             break
-    return {"final_text": final_text, "pending": pending, "degraded": degraded}
+    return {"final_text": final_text, "pending": pending, "degraded": degraded,
+            "session_id": used_session}
 
 
 def _pending_approval(event) -> dict | None:
@@ -566,7 +594,7 @@ async def _open_notice_window(obligation_id: int) -> dict:
     )
     if result["pending"]:
         ledger.save_resume_pointer(
-            obligation_id, USER_ID, session_id,
+            obligation_id, USER_ID, result.get("session_id") or session_id,
             result["pending"]["invocation_id"],
             result["pending"]["function_call_id"],
         )
