@@ -335,6 +335,14 @@ async def _run(session_id: str, *, text: str | None = None,
                 })
             except Exception:
                 pass
+            if pending is not None:
+                # The pause is the outcome, and it already exists. Re-running
+                # the turn would ask a second time, mint a second approval
+                # token, and invalidate the request already sitting on the
+                # owner's phone. Keep what landed.
+                degraded = None
+                used_session = use_session
+                break
             if (llm.is_quota_error(exc) or llm.is_transient(exc)) and attempt < tries - 1:
                 if llm.is_quota_error(exc):
                     llm.mark_dry(exc)   # that pair is refusing; step over it

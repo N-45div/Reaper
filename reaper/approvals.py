@@ -41,7 +41,10 @@ async def notify_pending(obligation: dict, receipt_hash: str | None = None) -> b
     if not configured():
         return False
     oid = obligation["id"]
-    token = secrets.token_urlsafe(9)
+    # One open pause, one token. Minting a fresh one for every offer silently
+    # expires the message already on the owner's phone - so the tap they make
+    # is refused for a reason that is true but useless to them.
+    token = ledger.get_meta(f"approval_token_{oid}") or secrets.token_urlsafe(9)
     ledger.set_meta(f"approval_token_{oid}", token)
 
     deadline = obligation.get("engine_deadline") or "?"

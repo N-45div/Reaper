@@ -167,6 +167,12 @@ def request_notice_approval(obligation_id: int, notice_summary: str) -> dict:
         obligation_id: The obligation awaiting notice.
         notice_summary: One-paragraph summary of what will be sent and to whom.
     """
+    ob = ledger.get_obligation(obligation_id)
+    if ob is not None and ob["status"] == "AWAITING_APPROVAL":
+        # Already waiting on a human. Asking again would put a second request
+        # on their phone and quietly retire the first one they were looking at.
+        return {"status": "pending", "obligation_id": obligation_id,
+                "note": "this obligation is already awaiting a human decision"}
     ledger.set_status(obligation_id, "AWAITING_APPROVAL")
     ledger.append_receipt(obligation_id, "APPROVAL_REQUESTED", {
         "summary": notice_summary,
