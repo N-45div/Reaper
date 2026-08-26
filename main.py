@@ -335,9 +335,13 @@ async def _run(session_id: str, *, text: str | None = None,
                 })
             except Exception:
                 pass
-            if llm.is_quota_error(exc) and attempt < tries - 1:
-                llm.mark_dry(exc)   # that pair is refusing; step over it
-                llm.rotate()        # move to one that still has allowance
+            if (llm.is_quota_error(exc) or llm.is_transient(exc)) and attempt < tries - 1:
+                if llm.is_quota_error(exc):
+                    llm.mark_dry(exc)   # that pair is refusing; step over it
+                # A model that is merely busy keeps its allowance - but this
+                # turn still needs an answer, and a different model usually
+                # has one. Rotating is cheaper than failing the wake.
+                llm.rotate()        # move to one that can answer now
                 adk_app.root_agent.model.model = llm.current_model()
                 # Rotation means the next pair is a different bucket, so there
                 # is nothing to wait out - unless every pair is spent, in which

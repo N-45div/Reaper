@@ -220,6 +220,21 @@ def rotate() -> None:
     _advance()  # every pair is spent; keep moving rather than hammering one
 
 
+def is_transient(exc: Exception) -> bool:
+    """A failure that says nothing about us and everything about right now.
+
+    An overloaded model answers 503; a busy backend answers 500. Neither means
+    our allowance is gone, so the bucket must not be blamed - but neither
+    should the turn die, because another model is very likely free.
+    """
+    text = _describe(exc)
+    if _is_call_budget(text):
+        return False
+    return any(tok in text for tok in
+               ("503", "UNAVAILABLE", "500", "INTERNAL", "ServerError",
+                "overloaded", "high demand", "DEADLINE_EXCEEDED", "TimeoutError"))
+
+
 def is_quota_error(exc: Exception) -> bool:
     """True only for an actual quota refusal - not every transient failure.
 
