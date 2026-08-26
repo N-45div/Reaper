@@ -99,7 +99,10 @@ async def _ticker():
     while True:
         await asyncio.sleep(TICK_SECONDS)
         today = clock.today()
-        for ob in ledger.list_obligations():
+        # Ledger I/O is synchronous gRPC. On the event loop it starves the
+        # health check, and a health check that cannot be answered gets the
+        # instance restarted - killing the very run it was waiting for.
+        for ob in await asyncio.to_thread(ledger.list_obligations):
             oid = ob["id"]
             if oid in _in_flight:
                 continue
@@ -111,11 +114,12 @@ async def _ticker():
                     deadline = date.fromisoformat(ob["engine_deadline"])
                     if today >= deadline - timedelta(days=WAKE_LEAD_DAYS):
                         _in_flight.add(oid)
-                        ledger.append_receipt(oid, "WOKE", {
-                            "reason": "calendar entered the notice window",
-                            "ledger_date": today.isoformat(),
-                            "deadline": ob["engine_deadline"],
-                        })
+                        await asyncio.to_thread(
+                            ledger.append_receipt, oid, "WOKE", {
+                                "reason": "calendar entered the notice window",
+                                "ledger_date": today.isoformat(),
+                                "deadline": ob["engine_deadline"],
+                            })
                         task = asyncio.create_task(_open_notice_window(oid))
                         _detached.add(task)
                         task.add_done_callback(_reap)
@@ -129,7 +133,7 @@ async def _ticker():
                         # no exception, no degraded flag. The ledger is the
                         # truth: a wake that left the obligation SCHEDULED
                         # did not work, whatever the run reported.
-                        after = ledger.get_obligation(oid)
+                        after = await asyncio.to_thread(ledger.get_obligation, oid)
                         stuck = after is not None and after["status"] == "SCHEDULED"
                         if r.get("degraded") or stuck:
                             ledger.log_access("WAKE_DEGRADED", {
@@ -143,10 +147,11 @@ async def _ticker():
                     term_end = date.fromisoformat(ob["term_end"])
                     if today > term_end:
                         _in_flight.add(oid)
-                        ledger.append_receipt(oid, "WOKE", {
-                            "reason": "term ended; next-cycle invoice due",
-                            "ledger_date": today.isoformat(),
-                        })
+                        await asyncio.to_thread(
+                            ledger.append_receipt, oid, "WOKE", {
+                                "reason": "term ended; next-cycle invoice due",
+                                "ledger_date": today.isoformat(),
+                            })
                         task = asyncio.create_task(_process_invoice(oid))
                         _detached.add(task)
                         task.add_done_callback(_reap)
@@ -641,7 +646,7 @@ async def calendar_feed():
 
 
 async def _open_notice_window(obligation_id: int) -> dict:
-    ob = ledger.get_obligation(obligation_id)
+    ob = await asyncio.to_thread(ledger.get_obligation, obligation_id)
     session_id = f"ob-{obligation_id}"
     result = await _run(
         session_id,
@@ -650,14 +655,15 @@ async def _open_notice_window(obligation_id: int) -> dict:
              "Draft the notice and request approval.",
     )
     if result["pending"]:
-        ledger.save_resume_pointer(
+        await asyncio.to_thread(
+            ledger.save_resume_pointer,
             obligation_id, USER_ID, result.get("session_id") or session_id,
             result["pending"]["invocation_id"],
             result["pending"]["function_call_id"],
         )
         # Offer the signature where the human actually is: on the phone.
         # Failure is harmless — the in-app approval stands regardless.
-        fresh = ledger.get_obligation(obligation_id)
+        fresh = await asyncio.to_thread(ledger.get_obligation, obligation_id)
         if fresh is not None:
             await approvals.notify_pending(fresh)
     return {"report": result["final_text"], "degraded": result["degraded"],

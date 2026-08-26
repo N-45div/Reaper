@@ -17,6 +17,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types as genai_types
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -34,6 +35,17 @@ _model_index = 0
 # remembered as spent so no later call wastes an attempt rediscovering it.
 _DRY_SECONDS = float(os.getenv("REAPER_DRY_SECONDS", "5400"))
 _dry: dict[tuple[int, str], float] = {}
+
+# Retrying a daily-quota refusal is worse than useless: the allowance will not
+# come back within the retry window, and every attempt spends another request
+# from a bucket that has none. So the transport retries genuinely transient
+# server errors and NEVER a 429 - that case belongs to bucket rotation.
+_HTTP_OPTIONS = genai_types.HttpOptions(
+    retry_options=genai_types.HttpRetryOptions(
+        attempts=3,
+        http_status_codes=[500, 502, 503, 504],
+    )
+)
 
 
 def keys() -> list[str]:
@@ -63,7 +75,7 @@ def client() -> genai.Client:
         raise RuntimeError("no GOOGLE_API_KEY configured")
     key = ks[_index % len(ks)]
     if key not in _clients:
-        _clients[key] = genai.Client(api_key=key)
+        _clients[key] = genai.Client(api_key=key, http_options=_HTTP_OPTIONS)
     return _clients[key]
 
 
