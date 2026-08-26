@@ -131,6 +131,9 @@ class _FakeLedger:
     def get_obligation(self, oid):
         return self.obligations.get(oid)
 
+    def list_obligations(self):
+        return list(self.obligations.values())
+
     def set_status(self, oid, status):
         self.obligations[oid]["status"] = status
 

@@ -120,7 +120,7 @@ step("self-wake -> AWAITING_APPROVAL", bool(aw), time.time() - t)
 
 # 6 - the phone offer MUST be on record (this sends a real Telegram message)
 t = time.time()
-offered, secs = poll("offered", lambda: "APPROVAL_OFFERED" in kinds(oid), 90)
+offered, secs = poll("offered", lambda: "APPROVAL_OFFERED" in kinds(oid), 150)
 step("APPROVAL_OFFERED receipt (phone buzzed)", bool(offered), time.time() - t)
 
 # 7 - chaos kill; the pause must survive the new process

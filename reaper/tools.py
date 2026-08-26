@@ -30,6 +30,29 @@ def gate_and_schedule(
     """
     term_end_d = date.fromisoformat(term_end)
     proposed_d = date.fromisoformat(proposed_deadline)
+
+    # IDEMPOTENT FILING: the same contract filed twice (a retried turn, a
+    # double upload) must not create a twin obligation. An active filing for
+    # this vendor and term is returned as-is — with a receipt saying so.
+    for existing in ledger.list_obligations():
+        if (existing.get("vendor", "").strip().lower() == vendor.strip().lower()
+                and existing.get("term_end") == term_end
+                and existing.get("status") in ("SCHEDULED", "BLOCKED",
+                                               "AWAITING_APPROVAL")):
+            ledger.append_receipt(existing["id"], "DUPLICATE_FILING_IGNORED", {
+                "note": "the same contract was filed again; the original "
+                        "filing stands and no twin obligation was created",
+            })
+            return {
+                "obligation_id": existing["id"],
+                "gate_verdict": existing.get("gate_verdict"),
+                "status": existing.get("status"),
+                "engine_deadline": existing.get("engine_deadline"),
+                "duplicate": True,
+                "note": "this contract is already on file; returning the "
+                        "existing obligation",
+            }
+
     verdict, derivation = gate(proposed_d, clause_text, term_end_d)
 
     # HOW the notice must travel is read off the clause deterministically —
