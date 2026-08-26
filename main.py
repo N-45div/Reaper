@@ -151,6 +151,39 @@ async def _ticker():
                                 wake_backoff[oid] = (time.monotonic() + min(600, 60 * (2 ** fails)), fails + 1)
                             else:
                                 wake_backoff.pop(oid, None)
+                    elif ob["status"] == "AWAITING_APPROVAL":
+                        # A decision already given, whose work never finished. The
+                        # human signed; then the process died before the resumed
+                        # run could deliver. Nothing else would ever pick this up,
+                        # so the signature would sit on the chain having achieved
+                        # nothing - the one outcome a durable pause exists to
+                        # prevent. Finish what the human already authorised.
+                        kinds = {r["kind"] for r in
+                                 await asyncio.to_thread(ledger.get_receipts, oid)}
+                        decided = kinds & {"APPROVED", "REJECTED"}
+                        if decided and "NOTICE_SENT" not in kinds:
+                            ptr = await asyncio.to_thread(
+                                ledger.get_resume_pointer, oid)
+                            if ptr is not None:
+                                _in_flight.add(oid)
+                                await asyncio.to_thread(
+                                    ledger.log_access, "DECISION_RECOVERED", {
+                                        "obligation_id": oid,
+                                        "decision": sorted(decided)[0],
+                                        "note": "the run carrying this decision "
+                                                "did not finish; resuming it",
+                                    })
+                                task = asyncio.create_task(_deliver_decision(
+                                    oid, "APPROVED" in decided,
+                                    via={"channel": "recovered"}))
+                                _detached.add(task)
+                                task.add_done_callback(_reap)
+                                try:
+                                    await task
+                                except asyncio.CancelledError:
+                                    if task.cancelled():
+                                        continue
+                                    raise
                     elif ob["status"] == "NOTICE_SENT":
                         term_end = date.fromisoformat(ob["term_end"])
                         if today > term_end:
