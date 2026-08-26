@@ -21,6 +21,8 @@ from google.adk.sessions import DatabaseSessionService
 from google.genai import types
 from pydantic import BaseModel
 
+from google.adk.agents.run_config import RunConfig
+
 from reaper import approvals, clock, inbox, ledger, llm, mailbox, privacy, tools, vision
 from reaper.agent import app as adk_app
 from reaper.config import APP_NAME, DB_URL
@@ -164,6 +166,10 @@ async def _ticker():
             except Exception as exc:
                 # Transient (e.g. model quota) — retried on a later tick, but
                 # the chain should say a wake happened and did not finish.
+                # Back off here too: without it a raising wake is retried on
+                # every single tick, which is how one failure becomes a storm.
+                wake_backoff[oid] = (time.monotonic() + min(600, 60 * (2 ** fails)),
+                                     fails + 1)
                 try:
                     ledger.log_access("WAKE_INCOMPLETE", {
                         "obligation_id": oid,
@@ -227,6 +233,12 @@ async def lifespan(_app: FastAPI):
 api = FastAPI(title="Reaper", lifespan=lifespan)
 
 
+# A turn of this agent needs a handful of model calls: read, gate, report. The
+# framework's default ceiling is five hundred, which is not a safety net but a
+# cannon - one confused turn can spend a day's free-tier allowance in seconds.
+_RUN_CONFIG = RunConfig(max_llm_calls=int(os.getenv("REAPER_MAX_LLM_CALLS", "12")))
+
+
 async def _run(session_id: str, *, text: str | None = None,
                parts: list | None = None, invocation_id: str | None = None) -> dict:
     """Run one turn; collect final text and any pending long-running approval."""
@@ -265,7 +277,7 @@ async def _run(session_id: str, *, text: str | None = None,
             except Exception:
                 pass
         kwargs = {"user_id": USER_ID, "session_id": use_session,
-                  "new_message": content}
+                  "new_message": content, "run_config": _RUN_CONFIG}
         if invocation_id:
             kwargs["invocation_id"] = invocation_id
         try:
@@ -285,10 +297,14 @@ async def _run(session_id: str, *, text: str | None = None,
             except Exception:
                 pass
             if llm.is_quota_error(exc) and attempt < tries - 1:
-                llm.mark_dry(exc)   # that pair's daily allowance is gone
-                llm.rotate()        # move to one that still has quota
+                llm.mark_dry(exc)   # that pair is refusing; step over it
+                llm.rotate()        # move to one that still has allowance
                 adk_app.root_agent.model.model = llm.current_model()
-                await asyncio.sleep(1.5)
+                # Rotation means the next pair is a different bucket, so there
+                # is nothing to wait out - unless every pair is spent, in which
+                # case the API's own retry delay is the only honest guess.
+                await asyncio.sleep(1.5 if llm.buckets_available() else
+                                    min(65.0, (llm.retry_after(exc) or 20) + 5))
                 continue
             # Tool effects already committed are in the ledger; the session is
             # in SQL. Nothing is lost — report the ledger truth, not a 500.

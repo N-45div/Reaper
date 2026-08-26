@@ -12,6 +12,7 @@ plainly, and the ledger records that the document could not be read.
 """
 
 import os
+import re
 import time
 from pathlib import Path
 
@@ -33,7 +34,7 @@ _model_index = 0
 # survive a spent bucket is to move to a different pair - not to wait, and not
 # to keep asking the one that just said no. A bucket that answers 429 is
 # remembered as spent so no later call wastes an attempt rediscovering it.
-_DRY_SECONDS = float(os.getenv("REAPER_DRY_SECONDS", "5400"))
+_DRY_SECONDS = float(os.getenv("REAPER_DRY_SECONDS", "120"))
 _dry: dict[tuple[int, str], float] = {}
 
 # Retrying a daily-quota refusal is worse than useless: the allowance will not
@@ -79,9 +80,35 @@ def client() -> genai.Client:
     return _clients[key]
 
 
+def _describe(exc: Exception) -> str:
+    return f"{type(exc).__name__}: {exc}"
+
+
+def _is_call_budget(text: str) -> bool:
+    """The agent framework's own per-turn call cap, which is not a quota error.
+
+    Its message contains the number 500, and a substring match once read that
+    as a server error - so a capped turn was retried as if the API had failed,
+    and the bucket it was using was blamed and locked out.
+    """
+    low = text.lower()
+    return "llmcallslimit" in low or "llm calls limit" in low
+
+
 def _retryable(exc: Exception) -> bool:
-    text = f"{type(exc).__name__}: {exc}"
+    text = _describe(exc)
+    if _is_call_budget(text):
+        return False
     return any(token in text for token in _RETRYABLE)
+
+
+def retry_after(exc: Exception) -> float | None:
+    """How long the API itself asked us to wait, in seconds, if it said."""
+    m = re.search(r"'retryDelay': '(\d+(?:\.\d+)?)s'", f"{exc}")
+    if m:
+        return float(m.group(1))
+    m = re.search(r"[Pp]lease retry in (\d+(?:\.\d+)?)s", f"{exc}")
+    return float(m.group(1)) if m else None
 
 
 def call(fn, *, attempts: int = 4, base_delay: float = 4.0):
@@ -129,13 +156,21 @@ def mark_dry(exc: Exception | None = None, seconds: float | None = None) -> None
     means the next call skips this pair instead of spending an attempt on it.
     """
     bucket = current_bucket()
+    wait = seconds
     if exc is not None:
         text = f"{exc}"
         for candidate in MODEL_LADDER:                 # the error names the model
             if candidate in text:
                 bucket = (bucket[0], candidate)
                 break
-    _dry[bucket] = time.monotonic() + (seconds if seconds is not None else _DRY_SECONDS)
+        if wait is None:
+            # The refusal carries its own recovery time. Trust it over a guess:
+            # sitting out ninety minutes on a request that would be served
+            # again in one is quota thrown away, not quota saved.
+            told = retry_after(exc)
+            if told is not None:
+                wait = told + 15
+    _dry[bucket] = time.monotonic() + (wait if wait is not None else _DRY_SECONDS)
 
 
 def _advance() -> None:
@@ -186,4 +221,13 @@ def rotate() -> None:
 
 
 def is_quota_error(exc: Exception) -> bool:
-    return _retryable(exc)
+    """True only for an actual quota refusal - not every transient failure.
+
+    This decides whether a (key, model) bucket gets blamed and stepped over,
+    so a 503 or a capped turn must never qualify: blaming a healthy bucket
+    takes capacity away that was never spent.
+    """
+    text = _describe(exc)
+    if _is_call_budget(text):
+        return False
+    return "429" in text or "RESOURCE_EXHAUSTED" in text
