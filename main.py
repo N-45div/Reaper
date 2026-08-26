@@ -247,7 +247,10 @@ async def _run(session_id: str, *, text: str | None = None,
     # can leave the old session un-runnable, and retrying into it would fail
     # every attempt no matter how much quota the next key has. Resumes never
     # switch sessions — the pointer names the one durable pause.
-    for attempt in range(4):
+    # One attempt per (key, model) bucket that still has quota - capped so a
+    # genuinely dead world fails fast rather than grinding.
+    tries = max(2, min(8, llm.buckets_available()))
+    for attempt in range(tries):
         use_session = session_id if (invocation_id or attempt == 0)             else f"{session_id}.r{attempt}"
         if use_session != session_id:
             try:
@@ -276,10 +279,11 @@ async def _run(session_id: str, *, text: str | None = None,
                 })
             except Exception:
                 pass
-            if llm.is_quota_error(exc) and attempt < 3:
-                llm.rotate()  # next key; after a full lap, the next model down
+            if llm.is_quota_error(exc) and attempt < tries - 1:
+                llm.mark_dry(exc)   # that pair's daily allowance is gone
+                llm.rotate()        # move to one that still has quota
                 adk_app.root_agent.model.model = llm.current_model()
-                await asyncio.sleep(2 + 3 * attempt)
+                await asyncio.sleep(1.5)
                 continue
             # Tool effects already committed are in the ledger; the session is
             # in SQL. Nothing is lost — report the ledger truth, not a 500.
@@ -480,6 +484,17 @@ async def invoice_document(obligation_id: int):
 # Operational diagnostics are facts worth keeping, but they belong in the
 # access log - the register of actions renders the story, not the plumbing.
 _DIAG_KINDS = {"RUN_ATTEMPT_FAILED", "WAKE_DEGRADED", "RUN_INCOMPLETE"}
+
+
+@api.get("/quota")
+async def quota():
+    """What model quota this instance believes it still has.
+
+    Free-tier Gemini is 20 requests per day per project per model, so the
+    honest unit is the (key, model) pair. Nothing here is a secret: it counts
+    buckets, never prints a key.
+    """
+    return llm.bucket_report()
 
 
 @api.get("/activity")

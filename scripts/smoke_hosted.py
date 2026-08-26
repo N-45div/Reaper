@@ -22,6 +22,10 @@ from pathlib import Path
 ARGS = sys.argv[1:]
 BASE = next((a for a in ARGS if not a.startswith("--")), "http://127.0.0.1:8080").rstrip("/")
 FROM_KILL = "--from-kill" in ARGS
+# --preroll is the go/no-go before a camera rolls: it proves a REAL wake can
+# complete right now (the thing every failed take died on) at the cost of one
+# short arc, and stops before the kill so the take starts on a clean world.
+PREROLL = "--preroll" in ARGS
 RESULTS = []
 
 
@@ -124,12 +128,13 @@ if not FROM_KILL:
     step("gate chain has EXTRACTED+GATED+PRECEDENT_CONSULTED",
          all(k in ks for k in ("EXTRACTED", "GATED", "PRECEDENT_CONSULTED")), 0, str(ks))
 
-    # 3 - intake the trap; expect BLOCKED, never SCHEDULED
-    t = time.time()
-    trap = Path(__file__).resolve().parent.parent / "data" / "contracts" / "ambiguous-hostwave.txt"
-    req("/contracts/upload", files=("file", trap.name, trap.read_bytes()), timeout=180)
-    blocked, _ = poll(lambda: by_status("BLOCKED"), 120)
-    step("intake trap -> BLOCKED", bool(blocked), time.time() - t)
+    if not PREROLL:
+        # 3 - intake the trap; expect BLOCKED, never SCHEDULED
+        t = time.time()
+        trap = Path(__file__).resolve().parent.parent / "data" / "contracts" / "ambiguous-hostwave.txt"
+        req("/contracts/upload", files=("file", trap.name, trap.read_bytes()), timeout=180)
+        blocked, _ = poll(lambda: by_status("BLOCKED"), 120)
+        step("intake trap -> BLOCKED", bool(blocked), time.time() - t)
 
     # 4 - precedent store answers
     t = time.time()
@@ -151,6 +156,15 @@ if not FROM_KILL:
     t = time.time()
     offered, _ = poll(lambda: "APPROVAL_OFFERED" in kinds(oid), 150)
     step("APPROVAL_OFFERED receipt (phone buzzed)", bool(offered), time.time() - t)
+
+    if PREROLL:
+        # The wake works right now, which is the only thing a take cannot
+        # recover from. Leave the world clean for the camera.
+        t = time.time()
+        req("/demo/reset", "POST", {}, timeout=180)
+        poll(lambda: len(obligations()) == 0, 60)
+        step("stage handed back clean", len(obligations()) == 0, time.time() - t)
+        finish()
 else:
     # continuation: the world must already hold an offered, durable pause
     t = time.time()

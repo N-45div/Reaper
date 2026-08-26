@@ -26,6 +26,15 @@ _RETRYABLE = ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE", "500", "INTERNA
 _index = 0
 _model_index = 0
 
+# Free-tier Gemini quota is granted per PROJECT and per MODEL:
+# "GenerateRequestsPerDayPerProjectPerModel-FreeTier", 20 requests a day.
+# So every (api key, model) pair is its own small daily bucket, and the way to
+# survive a spent bucket is to move to a different pair - not to wait, and not
+# to keep asking the one that just said no. A bucket that answers 429 is
+# remembered as spent so no later call wastes an attempt rediscovering it.
+_DRY_SECONDS = float(os.getenv("REAPER_DRY_SECONDS", "5400"))
+_dry: dict[tuple[int, str], float] = {}
+
 
 def keys() -> list[str]:
     """Every configured key, primary first."""
@@ -75,9 +84,13 @@ def call(fn, *, attempts: int = 4, base_delay: float = 4.0):
             last = exc
             if not _retryable(exc) or attempt == attempts - 1:
                 raise
-            _index += 1  # try the next key before waiting on this one
-            if _index % len(ks) == 0:
-                time.sleep(base_delay * (2 ** attempt))
+            if is_quota_error(exc):
+                mark_dry(exc)     # this pair is spent; do not come back to it
+                rotate()          # straight to a pair that still has quota
+            else:
+                _advance()        # transient: the next key may simply be luckier
+                if _index % len(ks) == 0:
+                    time.sleep(base_delay * (2 ** attempt))
     raise last
 
 
@@ -86,17 +99,78 @@ def current_model() -> str:
     return MODEL_LADDER[_model_index % len(MODEL_LADDER)]
 
 
-def rotate() -> None:
-    """Step to the next key; once every key is spent, step down the ladder.
+def current_bucket() -> tuple[int, str]:
+    """The (key index, model) pair that would serve the next call."""
+    ks = keys() or [""]
+    return (_index % len(ks), current_model())
 
-    API quota is granted per project and per model, so a run that dies on
-    one combination usually succeeds on another. Nothing about the agent's
-    behaviour changes — only which endpoint answers it.
+
+def _is_dry(bucket: tuple[int, str]) -> bool:
+    until = _dry.get(bucket)
+    return until is not None and time.monotonic() < until
+
+
+def mark_dry(exc: Exception | None = None, seconds: float | None = None) -> None:
+    """Remember that the current (key, model) bucket has no quota left.
+
+    The daily limit is small and the API says so plainly; recording the refusal
+    means the next call skips this pair instead of spending an attempt on it.
     """
+    bucket = current_bucket()
+    if exc is not None:
+        text = f"{exc}"
+        for candidate in MODEL_LADDER:                 # the error names the model
+            if candidate in text:
+                bucket = (bucket[0], candidate)
+                break
+    _dry[bucket] = time.monotonic() + (seconds if seconds is not None else _DRY_SECONDS)
+
+
+def _advance() -> None:
     global _index, _model_index
+    ks = keys() or [""]
     _index += 1
-    if len(keys()) and _index % len(keys()) == 0:
+    if _index % len(ks) == 0:
         _model_index += 1
+
+
+def buckets_available() -> int:
+    """How many (key, model) pairs are not known to be spent."""
+    ks = keys() or [""]
+    return sum(1 for i in range(len(ks)) for m in MODEL_LADDER
+               if not _is_dry((i, m)))
+
+
+def bucket_report() -> dict:
+    """What quota is believed to remain, for diagnostics and pre-flight checks."""
+    ks = keys() or [""]
+    now = time.monotonic()
+    return {
+        "keys": len(ks),
+        "models": list(MODEL_LADDER),
+        "available": buckets_available(),
+        "total": len(ks) * len(MODEL_LADDER),
+        "spent": [{"key": i, "model": m, "free_in_s": round(_dry[(i, m)] - now)}
+                  for (i, m) in sorted(_dry, key=lambda b: (b[0], b[1]))
+                  if _dry[(i, m)] > now],
+        "current": {"key": current_bucket()[0], "model": current_bucket()[1]},
+    }
+
+
+def rotate() -> None:
+    """Move to the next (key, model) bucket that still has quota.
+
+    Free-tier quota is per project AND per model, so a call that dies on one
+    pair usually succeeds on another. Pairs already known to be spent are
+    stepped over rather than retried. Nothing about the agent's behaviour
+    changes — only which endpoint answers it.
+    """
+    ks = keys() or [""]
+    for _ in range(len(ks) * len(MODEL_LADDER)):
+        _advance()
+        if not _is_dry(current_bucket()):
+            return
+    _advance()  # every pair is spent; keep moving rather than hammering one
 
 
 def is_quota_error(exc: Exception) -> bool:
