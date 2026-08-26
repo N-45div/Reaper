@@ -100,86 +100,101 @@ async def _ticker():
     await asyncio.sleep(max(TICK_SECONDS, 45))
     while True:
         await asyncio.sleep(TICK_SECONDS)
-        today = clock.today()
-        # Ledger I/O is synchronous gRPC. On the event loop it starves the
-        # health check, and a health check that cannot be answered gets the
-        # instance restarted - killing the very run it was waiting for.
-        for ob in await asyncio.to_thread(ledger.list_obligations):
-            oid = ob["id"]
-            if oid in _in_flight:
-                continue
-            nb, fails = wake_backoff.get(oid, (0.0, 0))
-            if time.monotonic() < nb:
-                continue  # a recent wake failed; don't burn quota every tick
-            try:
-                if ob["status"] == "SCHEDULED" and ob["engine_deadline"]:
-                    deadline = date.fromisoformat(ob["engine_deadline"])
-                    if today >= deadline - timedelta(days=WAKE_LEAD_DAYS):
-                        _in_flight.add(oid)
-                        await asyncio.to_thread(
-                            ledger.append_receipt, oid, "WOKE", {
-                                "reason": "calendar entered the notice window",
-                                "ledger_date": today.isoformat(),
-                                "deadline": ob["engine_deadline"],
-                            })
-                        task = asyncio.create_task(_open_notice_window(oid))
-                        _detached.add(task)
-                        task.add_done_callback(_reap)
-                        try:
-                            r = await task
-                        except asyncio.CancelledError:
-                            if task.cancelled():
-                                continue  # a reset drew the world boundary
-                            raise
-                        # A failed model call can end the stream SILENTLY -
-                        # no exception, no degraded flag. The ledger is the
-                        # truth: a wake that left the obligation SCHEDULED
-                        # did not work, whatever the run reported.
-                        after = await asyncio.to_thread(ledger.get_obligation, oid)
-                        stuck = after is not None and after["status"] == "SCHEDULED"
-                        if r.get("degraded") or stuck:
-                            ledger.log_access("WAKE_DEGRADED", {
-                                "obligation_id": oid, "fails": fails + 1,
-                                "reason": str(r.get("degraded") or "run ended without effect")[:160],
-                            })
-                            wake_backoff[oid] = (time.monotonic() + min(600, 60 * (2 ** fails)), fails + 1)
-                        else:
-                            wake_backoff.pop(oid, None)
-                elif ob["status"] == "NOTICE_SENT":
-                    term_end = date.fromisoformat(ob["term_end"])
-                    if today > term_end:
-                        _in_flight.add(oid)
-                        await asyncio.to_thread(
-                            ledger.append_receipt, oid, "WOKE", {
-                                "reason": "term ended; next-cycle invoice due",
-                                "ledger_date": today.isoformat(),
-                            })
-                        task = asyncio.create_task(_process_invoice(oid))
-                        _detached.add(task)
-                        task.add_done_callback(_reap)
-                        try:
-                            await task
-                        except asyncio.CancelledError:
-                            if task.cancelled():
-                                continue  # a reset drew the world boundary
-                            raise
-            except Exception as exc:
-                # Transient (e.g. model quota) — retried on a later tick, but
-                # the chain should say a wake happened and did not finish.
-                # Back off here too: without it a raising wake is retried on
-                # every single tick, which is how one failure becomes a storm.
-                wake_backoff[oid] = (time.monotonic() + min(600, 60 * (2 ** fails)),
-                                     fails + 1)
+        # A heartbeat that can die is not a heartbeat. One transient
+        # failure here - a ledger blip, a bad row - used to end this
+        # loop for the life of the process: no wake, no receipt, no
+        # error, just an obligation that sits at SCHEDULED forever.
+        try:
+            today = clock.today()
+            # Ledger I/O is synchronous gRPC. On the event loop it starves the
+            # health check, and a health check that cannot be answered gets the
+            # instance restarted - killing the very run it was waiting for.
+            for ob in await asyncio.to_thread(ledger.list_obligations):
+                oid = ob["id"]
+                if oid in _in_flight:
+                    continue
+                nb, fails = wake_backoff.get(oid, (0.0, 0))
+                if time.monotonic() < nb:
+                    continue  # a recent wake failed; don't burn quota every tick
                 try:
-                    ledger.log_access("WAKE_INCOMPLETE", {
-                        "obligation_id": oid,
-                        "error": type(exc).__name__,
-                        "note": "retried on a later tick",
-                    })
-                except Exception:
-                    pass
-            finally:
-                _in_flight.discard(oid)
+                    if ob["status"] == "SCHEDULED" and ob["engine_deadline"]:
+                        deadline = date.fromisoformat(ob["engine_deadline"])
+                        if today >= deadline - timedelta(days=WAKE_LEAD_DAYS):
+                            _in_flight.add(oid)
+                            await asyncio.to_thread(
+                                ledger.append_receipt, oid, "WOKE", {
+                                    "reason": "calendar entered the notice window",
+                                    "ledger_date": today.isoformat(),
+                                    "deadline": ob["engine_deadline"],
+                                })
+                            task = asyncio.create_task(_open_notice_window(oid))
+                            _detached.add(task)
+                            task.add_done_callback(_reap)
+                            try:
+                                r = await task
+                            except asyncio.CancelledError:
+                                if task.cancelled():
+                                    continue  # a reset drew the world boundary
+                                raise
+                            # A failed model call can end the stream SILENTLY -
+                            # no exception, no degraded flag. The ledger is the
+                            # truth: a wake that left the obligation SCHEDULED
+                            # did not work, whatever the run reported.
+                            after = await asyncio.to_thread(ledger.get_obligation, oid)
+                            stuck = after is not None and after["status"] == "SCHEDULED"
+                            if r.get("degraded") or stuck:
+                                ledger.log_access("WAKE_DEGRADED", {
+                                    "obligation_id": oid, "fails": fails + 1,
+                                    "reason": str(r.get("degraded") or "run ended without effect")[:160],
+                                })
+                                wake_backoff[oid] = (time.monotonic() + min(600, 60 * (2 ** fails)), fails + 1)
+                            else:
+                                wake_backoff.pop(oid, None)
+                    elif ob["status"] == "NOTICE_SENT":
+                        term_end = date.fromisoformat(ob["term_end"])
+                        if today > term_end:
+                            _in_flight.add(oid)
+                            await asyncio.to_thread(
+                                ledger.append_receipt, oid, "WOKE", {
+                                    "reason": "term ended; next-cycle invoice due",
+                                    "ledger_date": today.isoformat(),
+                                })
+                            task = asyncio.create_task(_process_invoice(oid))
+                            _detached.add(task)
+                            task.add_done_callback(_reap)
+                            try:
+                                await task
+                            except asyncio.CancelledError:
+                                if task.cancelled():
+                                    continue  # a reset drew the world boundary
+                                raise
+                except Exception as exc:
+                    # Transient (e.g. model quota) — retried on a later tick, but
+                    # the chain should say a wake happened and did not finish.
+                    # Back off here too: without it a raising wake is retried on
+                    # every single tick, which is how one failure becomes a storm.
+                    wake_backoff[oid] = (time.monotonic() + min(600, 60 * (2 ** fails)),
+                                         fails + 1)
+                    try:
+                        ledger.log_access("WAKE_INCOMPLETE", {
+                            "obligation_id": oid,
+                            "error": type(exc).__name__,
+                            "note": "retried on a later tick",
+                        })
+                    except Exception:
+                        pass
+                finally:
+                    _in_flight.discard(oid)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            try:
+                await asyncio.to_thread(ledger.log_access, "HEARTBEAT_ERROR", {
+                    "error": f"{type(exc).__name__}: {exc}"[:200],
+                    "note": "the tick failed; the heartbeat continues",
+                })
+            except Exception:
+                pass
 
 
 async def _mailbox_loop():
@@ -237,6 +252,7 @@ api = FastAPI(title="Reaper", lifespan=lifespan)
 # framework's default ceiling is five hundred, which is not a safety net but a
 # cannon - one confused turn can spend a day's free-tier allowance in seconds.
 _RUN_CONFIG = RunConfig(max_llm_calls=int(os.getenv("REAPER_MAX_LLM_CALLS", "12")))
+TURN_TIMEOUT_S = float(os.getenv("REAPER_TURN_TIMEOUT_S", "180"))
 
 
 async def _run(session_id: str, *, text: str | None = None,
@@ -282,10 +298,13 @@ async def _run(session_id: str, *, text: str | None = None,
             kwargs["invocation_id"] = invocation_id
         try:
             events = 0
-            async for event in runner.run_async(**kwargs):
-                events += 1
-                pending = _pending_approval(event) or pending
-                final_text = _final_text(event) or final_text
+            # A model call that never returns would otherwise hold this
+            # obligation in flight forever - silently, since nothing raises.
+            async with asyncio.timeout(TURN_TIMEOUT_S):
+                async for event in runner.run_async(**kwargs):
+                    events += 1
+                    pending = _pending_approval(event) or pending
+                    final_text = _final_text(event) or final_text
             if events == 0 or (pending is None and not final_text):
                 # A turn that yields nothing at all is not success. It has
                 # happened silently - no exception, no output - and without
