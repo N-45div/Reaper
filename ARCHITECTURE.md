@@ -231,6 +231,79 @@ jobs (the sandbox forbids DML and streaming), and sandbox tables expire after
 | Ask to open a mailbox message | Open it silently — every open is a chain-0 receipt with a reason |
 | See how similar clauses resolved before | Let that history change a verdict — precedent is recalled *after* the gate rules, and is labelled prior history |
 
+## Running unattended
+
+An agent that sleeps for months and wakes at 3am has to survive the ordinary
+indignities of infrastructure without inventing an answer. Three of them shaped
+this design, and each is enforced in code rather than hoped for.
+
+### Quota is a matrix, not a number
+
+Free-tier Gemini grants `GenerateRequestsPerDayPerProjectPerModel-FreeTier`:
+a small daily allowance **per project and per model**. So capacity is a grid of
+(API key, model) pairs, each its own bucket, and the way to survive a spent
+bucket is to move to a different one.
+
+```mermaid
+flowchart LR
+    call["a turn needs a model"] --> pick{"current pair<br/>has allowance?"}
+    pick -- yes --> send["send"]
+    pick -- no --> skip["step to the next pair"]
+    skip --> pick
+    send --> r{"429?"}
+    r -- no --> done["turn proceeds"]
+    r -- yes --> mark["remember this pair is spent<br/>for exactly as long as<br/>the API said"]
+    mark --> skip
+```
+
+- `GET /quota` reports what remains, counting buckets and never printing a key.
+- `scripts/quota_census.py` asks every pair directly, so capacity is measured
+  rather than assumed.
+- A refusal carries the second it will be served again; that is honoured
+  instead of guessed at. Sitting out an hour on a request that recovers in a
+  minute is quota thrown away, not saved.
+- The transport retries genuine server errors and **never** a quota refusal:
+  a daily allowance does not return inside a retry window, so retrying it just
+  spends more of a bucket that has none.
+
+### A turn is capped
+
+The agent framework's default ceiling is five hundred model calls per turn.
+This agent needs a handful, and an uncapped turn is not a safety net but a
+cannon: one confused turn can spend a day's allowance in seconds. `RunConfig`
+caps it at `REAPER_MAX_LLM_CALLS` (default 12).
+
+That cap's own error mentions the number 500, which a substring match once read
+as a server error — so a capped turn was retried *and* the healthy bucket it ran
+on was blamed and locked out. Errors are now classified by what they are: only a
+real 429 marks a bucket spent.
+
+### Nothing blocks the event loop
+
+The platform decides an instance is dead when a health check goes unanswered for
+five seconds. A synchronous Firestore round trip or a blocking triage call on the
+event loop will do exactly that — and when the instance is restarted, the agent
+run in flight dies leaving no exception, no log, and a status that simply never
+moves.
+
+So: **an endpoint that touches Firestore or a model is a plain `def`** (which
+FastAPI runs in a worker thread), or it offloads explicitly with
+`asyncio.to_thread`. The ticker, intake, upload and wake paths all follow this.
+
+### Failure is recorded, never inferred
+
+| What happens | What the record says |
+|---|---|
+| A model refuses on quota | `RUN_ATTEMPT_FAILED` with the attempt and the error |
+| A model returns an empty turn | `RUN_EMPTY` with the model and key that produced it |
+| A wake leaves the obligation where it was | `WAKE_DEGRADED` — the ledger is the truth, not the run's self-report |
+| A crash strands a paused approval | `APPROVAL_RESET`, and the notice window re-opens |
+| The same contract is filed twice | `DUPLICATE_FILING_IGNORED` on the original |
+
+None of these guess. A run that reports success while the ledger did not move is
+treated as the failure it is, and the next attempt uses a different model rather
+than asking the silent one again.
+
 ## Google Cloud deployment
 
 ```mermaid

@@ -208,6 +208,50 @@ each run; seeded rows are a labelled corpus (`source: "fixture"`), not
 customer history; and this feature was added after the demo video was
 recorded, so it appears here and on the hosted instance, not in the film.
 
+## Checking quota before you rely on it
+
+Free-tier Gemini is granted per project **and per model**, so the honest unit is
+the (key, model) pair. Two commands answer "can this actually run right now?":
+
+```bash
+# what the running instance believes it has left (no API calls, no keys printed)
+curl -s https://reaper-sxxs.onrender.com/quota
+
+# ask every pair directly - one realistic request each
+python scripts/quota_census.py
+```
+
+A spent pair reports the exact quota that refused it:
+
+```
+key0 ...MrzWE8  gemini-3.6-flash   SPENT  [GenerateRequestsPerDayPerProjectPerModel-FreeTier limit=20]
+key1 ...fwWSLw  gemini-3.6-flash   OK
+```
+
+The agent rotates past spent pairs on its own; the census exists so a human can
+see the same picture before depending on it.
+
+## Proving the arc end to end, headlessly
+
+`scripts/smoke_hosted.py` drives the whole story through the public API and
+asserts every transition, with no browser involved:
+
+```bash
+python scripts/smoke_hosted.py https://reaper-sxxs.onrender.com            # full arc
+python scripts/smoke_hosted.py https://reaper-sxxs.onrender.com --preroll  # up to the phone offer
+python scripts/smoke_hosted.py https://reaper-sxxs.onrender.com --from-kill  # continue a primed world
+```
+
+The full arc covers: reset, intake, the trap clause, precedent recall, the
+self-wake, the approval offer reaching a phone, a real process kill, the pause
+surviving into a new process, the approval resuming across that death, delivery
+with the approving receipt's hash on it, the invoice verdict, and the chain
+verifying from genesis.
+
+`--preroll` stops after the approval offer and hands back a clean world. It
+answers the one question that matters before anything depends on the agent:
+*can a real wake complete right now?*
+
 ## Optional live channels
 
 Each is independent; configure only what you want to verify. All settings are
