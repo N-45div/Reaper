@@ -125,10 +125,16 @@ async def _ticker():
                             if task.cancelled():
                                 continue  # a reset drew the world boundary
                             raise
-                        if r.get("degraded"):
+                        # A failed model call can end the stream SILENTLY -
+                        # no exception, no degraded flag. The ledger is the
+                        # truth: a wake that left the obligation SCHEDULED
+                        # did not work, whatever the run reported.
+                        after = ledger.get_obligation(oid)
+                        stuck = after is not None and after["status"] == "SCHEDULED"
+                        if r.get("degraded") or stuck:
                             ledger.log_access("WAKE_DEGRADED", {
                                 "obligation_id": oid, "fails": fails + 1,
-                                "reason": str(r.get("degraded"))[:160],
+                                "reason": str(r.get("degraded") or "run ended without effect")[:160],
                             })
                             wake_backoff[oid] = (time.monotonic() + min(600, 60 * (2 ** fails)), fails + 1)
                         else:
