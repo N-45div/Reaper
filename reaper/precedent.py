@@ -24,6 +24,7 @@ from pathlib import Path
 from . import llm
 from .config import (
     BQ_DATASET,
+    BQ_PROJECT,
     BQ_LOCATION,
     BQ_TABLE,
     EMBED_DIM,
@@ -55,12 +56,12 @@ def _client():
     if _bq is None:
         from google.cloud import bigquery  # deferred: ~15s cold import
 
-        _bq = bigquery.Client(project=GCP_PROJECT, location=BQ_LOCATION)
+        _bq = bigquery.Client(project=BQ_PROJECT, location=BQ_LOCATION)
     return _bq
 
 
 def _table_id() -> str:
-    return f"{GCP_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
+    return f"{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
 
 
 # --------------------------------------------------------------------------

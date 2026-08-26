@@ -16,6 +16,7 @@ Every stage writes its counts into chain 0, declined ids included (hashed), so
 "opened 3 of 1,247" is a claim the ledger can back.
 """
 
+import time
 import email
 import email.policy
 import hashlib
@@ -41,6 +42,8 @@ _PREFILTER = re.compile(
     r"auto[- ]?renew|automatically renew|renewal term|notice period|"
     r"shall (?:be )?renewed|non[- ]?renewal|unless .{0,40}notice", re.I)
 
+
+_last_idle_receipt = 0.0
 
 def configured() -> bool:
     return bool(MAIL_USER and MAIL_PASS)
@@ -199,13 +202,23 @@ def scan_once() -> ScanResult:
             conn.store(uid, "+FLAGS", "\\Seen")
             result.admitted.append(item)
 
-    ledger.log_access("MAILBOX_SCANNED", {
-        "unseen": result.seen,
-        "opened": len(result.admitted),
-        "declined": result.declined,
-        "declined_id_hashes": result.declined_id_hashes[:40],
-        "note": "headers read with BODY.PEEK; bodies fetched for admitted only",
-    })
+    # A scan that saw nothing new is not an event worth a receipt every minute:
+    # unconditional per-scan writes once burned an entire day of Firestore quota.
+    # Chain 0 still records every open and every refusal the moment they happen,
+    # plus an hourly heartbeat proving the watch never stopped.
+    global _last_idle_receipt
+    changed = bool(result.seen or result.admitted or result.declined)
+    hour_passed = (time.time() - _last_idle_receipt) >= 3600
+    if changed or hour_passed:
+        _last_idle_receipt = time.time()
+        ledger.log_access("MAILBOX_SCANNED", {
+            "unseen": result.seen,
+            "opened": len(result.admitted),
+            "declined": result.declined,
+            "declined_id_hashes": result.declined_id_hashes[:40],
+            "note": ("headers read with BODY.PEEK; bodies fetched for admitted only"
+                     if changed else "hourly heartbeat — nothing new since the last receipt"),
+        })
     for item in result.admitted:
         ledger.log_access("MESSAGE_OPENED", {
             "message_id_hash": item["message_id_hash"],

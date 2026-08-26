@@ -39,6 +39,9 @@ LEDGER_BACKEND = os.getenv("REAPER_LEDGER", "sqlite").lower()
 # OFF unless explicitly enabled: a fresh clone, CI, and every test must never
 # reach Google Cloud. "off" makes precedent.recall() a pure no-op.
 PRECEDENT_BACKEND = os.getenv("REAPER_PRECEDENT", "off").lower()   # off | bigquery
+# The precedent store may live on a different project than the ledger (the
+# BigQuery sandbox quota and the Firestore daily quota are separate budgets).
+BQ_PROJECT = os.getenv("REAPER_BQ_PROJECT", "") or GCP_PROJECT
 BQ_DATASET = os.getenv("REAPER_BQ_DATASET", "reaper_precedents")
 BQ_TABLE = os.getenv("REAPER_BQ_TABLE", "precedents")
 BQ_LOCATION = os.getenv("REAPER_BQ_LOCATION", "US")
