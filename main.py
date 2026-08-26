@@ -92,6 +92,10 @@ async def _ticker():
     logic runs on an in-process loop so the autonomy is visible in the demo.
     """
     wake_backoff: dict[int, tuple[float, int]] = {}  # oid -> (not_before, fails)
+    # Boot grace: waking an overdue obligation in the first seconds of a new
+    # process competes with startup for the event loop, and a health check
+    # that cannot be answered reads as a dead instance.
+    await asyncio.sleep(max(TICK_SECONDS, 45))
     while True:
         await asyncio.sleep(TICK_SECONDS)
         today = clock.today()
@@ -112,7 +116,15 @@ async def _ticker():
                             "ledger_date": today.isoformat(),
                             "deadline": ob["engine_deadline"],
                         })
-                        r = await _open_notice_window(oid)
+                        task = asyncio.create_task(_open_notice_window(oid))
+                        _detached.add(task)
+                        task.add_done_callback(_reap)
+                        try:
+                            r = await task
+                        except asyncio.CancelledError:
+                            if task.cancelled():
+                                continue  # a reset drew the world boundary
+                            raise
                         if r.get("degraded"):
                             ledger.log_access("WAKE_DEGRADED", {
                                 "obligation_id": oid, "fails": fails + 1,
@@ -129,7 +141,15 @@ async def _ticker():
                             "reason": "term ended; next-cycle invoice due",
                             "ledger_date": today.isoformat(),
                         })
-                        await _process_invoice(oid)
+                        task = asyncio.create_task(_process_invoice(oid))
+                        _detached.add(task)
+                        task.add_done_callback(_reap)
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            if task.cancelled():
+                                continue  # a reset drew the world boundary
+                            raise
             except Exception as exc:
                 # Transient (e.g. model quota) — retried on a later tick, but
                 # the chain should say a wake happened and did not finish.
@@ -451,9 +471,15 @@ async def invoice_document(obligation_id: int):
     return FileResponse(path)
 
 
+# Operational diagnostics are facts worth keeping, but they belong in the
+# access log - the register of actions renders the story, not the plumbing.
+_DIAG_KINDS = {"RUN_ATTEMPT_FAILED", "WAKE_DEGRADED", "RUN_INCOMPLETE"}
+
+
 @api.get("/activity")
 async def activity():
-    return ledger.recent_activity()
+    return [e for e in ledger.recent_activity()
+            if e.get("kind") not in _DIAG_KINDS]
 
 
 @api.post("/obligations/{obligation_id}/offer")
