@@ -229,6 +229,11 @@ const ENTRY = {
   VERIFIED:           ["Billing stopped", "deterministic check: vendor honored the cancellation", "good"],
   REFUTED:            ["Billed anyway", "deterministic check caught an unauthorized charge", "bad"],
   DISPUTE_OPENED:     ["Dispute served", "dispute filed with the delivery receipt as evidence", "bad"],
+  PRECEDENT_CONSULTED: ["Precedent consulted", "how clauses shaped like this one resolved before - advisory only", ""],
+  DUPLICATE_FILING_IGNORED: ["Duplicate filing ignored", "this contract was already on file; the original stands", ""],
+  DECISION_RECOVERED: ["Decision recovered", "a signature survived the process that was carrying it", "good"],
+  APPROVAL_RESET:     ["Approval reissued", "the paused run was lost; a fresh signature was requested", ""],
+  DISPUTE_BACKSTOP:   ["Dispute filed by backstop", "the verdict stood even though the run ended early", ""],
 };
 
 let obs = [], selId = null, lastReport = null;

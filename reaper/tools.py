@@ -269,6 +269,20 @@ def check_invoice(obligation_id: int) -> dict:
     if ob is None:
         return {"error": f"no obligation {obligation_id}"}
 
+    prior = [r for r in ledger.get_receipts(obligation_id)
+             if r["kind"] == "INVOICE_CHECKED"]
+    if prior:
+        # The verdict on this invoice is already on the record. Reading it
+        # again cannot change arithmetic, and restating it only crowds the
+        # chain with the same finding.
+        import json as _json
+        payload = _json.loads(prior[-1]["payload"]) if isinstance(
+            prior[-1]["payload"], str) else (prior[-1]["payload"] or {})
+        return {"already_checked": True, "obligation_id": obligation_id,
+                "verdict": ob["status"], "billed": payload.get("billed"),
+                "expected": payload.get("expected"),
+                "receipt_hash": prior[-1]["hash"]}
+
     if inbox.read_next_invoice(ob["vendor"]) is None:
         inbox.seed_next_invoice(ob["vendor"], ob["status"] == "NOTICE_SENT",
                                 ob.get("term_end"))
@@ -314,9 +328,16 @@ def open_dispute(obligation_id: int, dispute_text: str) -> dict:
         obligation_id: The REFUTED obligation.
         dispute_text: The dispute letter body (evidence is attached automatically).
     """
-    notice_receipts = [
-        r for r in ledger.get_receipts(obligation_id) if r["kind"] == "NOTICE_SENT"
-    ]
+    chain = ledger.get_receipts(obligation_id)
+    already = [r for r in chain if r["kind"] == "DISPUTE_OPENED"]
+    if already:
+        # One wrong invoice, one dispute. Filing it again would put the same
+        # claim on the record several times over, and a chain that repeats
+        # itself is worth less as evidence than one that does not.
+        return {"already_filed": True, "obligation_id": obligation_id,
+                "receipt_hash": already[0]["hash"],
+                "note": "this dispute is already on the record"}
+    notice_receipts = [r for r in chain if r["kind"] == "NOTICE_SENT"]
     if not notice_receipts:
         return {"error": "no NOTICE_SENT receipt on file; cannot evidence the dispute"}
     evidence = notice_receipts[-1]
