@@ -601,6 +601,19 @@ async def _deliver_decision(obligation_id: int, approve: bool, via: dict) -> dic
         await asyncio.sleep(0.5)
         ptr = ledger.get_resume_pointer(obligation_id)
     if ptr is None:
+        ob = ledger.get_obligation(obligation_id)
+        if ob is not None and ob["status"] == "AWAITING_APPROVAL":
+            # The process died between AWAITING_APPROVAL and the resume pointer
+            # becoming durable, so this pause can never be resumed. Heal instead
+            # of stranding: receipt the fact, fall back to SCHEDULED, and re-open
+            # the notice window so a fresh durable pause (and a fresh phone
+            # offer) replaces the lost one. The human signs the reissued request.
+            ledger.append_receipt(obligation_id, "APPROVAL_RESET", {
+                "reason": "process died before the paused run became durable",
+                "action": "notice window re-opened; a fresh approval will be offered",
+            })
+            ledger.set_status(obligation_id, "SCHEDULED")
+            return await _open_notice_window(obligation_id)
         return None
     # The decision is recorded once, even if delivering it takes several
     # attempts: an evidence chain with two APPROVED entries for one signature
