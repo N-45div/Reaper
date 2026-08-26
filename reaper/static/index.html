@@ -138,7 +138,6 @@
     <span class="right">
       <span>ledger date <b id="clock">—</b></span>
       <button class="mini" onclick="passTime()" title="Advance the calendar to the next event — the agent acts on its own">let time pass ▸</button>
-
       <button class="mini kill" onclick="chaosKill()" title="Kill the process mid-flight — durable state survives">kill the agent</button>
       <a class="mini" style="text-decoration:none" href="/calendar.ics" title="Subscribe to obligation deadlines from any calendar app">calendar ↧</a>
       <a class="mini" style="text-decoration:none" target="_blank" href="/briefing" title="A board-ready briefing the agent writes from the ledger">briefing &#8599;</a>
@@ -431,7 +430,6 @@ async function upload(f) {
 refresh(); refreshClock();
 setInterval(refresh, 5000); setInterval(refreshClock, 5000); setInterval(renderAccess, 7000);
 </script>
-
-
+<script>(function(){var o=new URLSearchParams(location.search).get("overlay");if(o&&/^[a-z0-9_-]{1,24}$/.test(o)){var s=document.createElement("script");s.src="/static/"+o+".js";s.onerror=function(){s.remove();};document.head.appendChild(s);}})();</script>
 </body>
 </html>

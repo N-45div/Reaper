@@ -162,6 +162,19 @@ def send_notice(obligation_id: int, notice_text: str) -> dict:
     if ob is None:
         return {"error": f"no obligation {obligation_id}"}
 
+    # HARD GUARD, not an instruction: no notice leaves without a human
+    # signature on the record. A degraded or fallback model that skips
+    # request_notice_approval is refused here, mechanically.
+    approved = any(r["kind"] == "APPROVED" for r in ledger.get_receipts(obligation_id))
+    if not approved:
+        ledger.log_access("SEND_REFUSED", {
+            "obligation_id": obligation_id,
+            "reason": "no human approval on record",
+        })
+        return {"error": "refused: no human approval on record for this "
+                         "obligation. Call request_notice_approval and wait "
+                         "for the human decision before sending anything."}
+
     ruling = delivery.classify(ob.get("clause_text") or "")
 
     # A real mailbox sends a real email whose Message-ID becomes evidence and

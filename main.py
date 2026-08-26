@@ -6,6 +6,7 @@ freshly restarted process resume the exact paused invocation.
 """
 
 import asyncio
+import time
 import io
 import os
 import uuid
@@ -90,6 +91,7 @@ async def _ticker():
     In production this is a Cloud Scheduler -> Pub/Sub wake; locally the same
     logic runs on an in-process loop so the autonomy is visible in the demo.
     """
+    wake_backoff: dict[int, tuple[float, int]] = {}  # oid -> (not_before, fails)
     while True:
         await asyncio.sleep(TICK_SECONDS)
         today = clock.today()
@@ -97,6 +99,9 @@ async def _ticker():
             oid = ob["id"]
             if oid in _in_flight:
                 continue
+            nb, fails = wake_backoff.get(oid, (0.0, 0))
+            if time.monotonic() < nb:
+                continue  # a recent wake failed; don't burn quota every tick
             try:
                 if ob["status"] == "SCHEDULED" and ob["engine_deadline"]:
                     deadline = date.fromisoformat(ob["engine_deadline"])
@@ -107,7 +112,11 @@ async def _ticker():
                             "ledger_date": today.isoformat(),
                             "deadline": ob["engine_deadline"],
                         })
-                        await _open_notice_window(oid)
+                        r = await _open_notice_window(oid)
+                        if r.get("degraded"):
+                            wake_backoff[oid] = (time.monotonic() + min(600, 60 * (2 ** fails)), fails + 1)
+                        else:
+                            wake_backoff.pop(oid, None)
                 elif ob["status"] == "NOTICE_SENT":
                     term_end = date.fromisoformat(ob["term_end"])
                     if today > term_end:
@@ -202,20 +211,30 @@ async def _run(session_id: str, *, text: str | None = None,
         kwargs["invocation_id"] = invocation_id
 
     final_text, pending, degraded = None, None, None
-    try:
-        async for event in runner.run_async(**kwargs):
-            pending = _pending_approval(event) or pending
-            final_text = _final_text(event) or final_text
-    except Exception as exc:  # model quota/transient errors mid-run
-        if llm.is_quota_error(exc):
-            llm.rotate()  # next run tries another project's or model's quota
-            adk_app.root_agent.model.model = llm.current_model()
-        # Tool effects already committed are in the ledger; the session is in
-        # SQL. Nothing is lost — report the ledger truth instead of a 500.
-        degraded = (
-            f"model call failed mid-run ({type(exc).__name__}); completed tool "
-            "actions are persisted in the ledger and the session is resumable"
-        )
+    # Quota errors are retried HERE, inside the turn, stepping keys and then
+    # the model ladder — not deferred to a later tick. A wake that waits for
+    # the next heartbeat leaves a human-visible pause with nothing pending,
+    # which is exactly the window a crash turned into a stranded approval.
+    for attempt in range(4):
+        try:
+            async for event in runner.run_async(**kwargs):
+                pending = _pending_approval(event) or pending
+                final_text = _final_text(event) or final_text
+            degraded = None
+            break
+        except Exception as exc:  # model quota/transient errors mid-run
+            if llm.is_quota_error(exc) and attempt < 3:
+                llm.rotate()  # next key; after a full lap, the next model down
+                adk_app.root_agent.model.model = llm.current_model()
+                await asyncio.sleep(2 + 3 * attempt)
+                continue
+            # Tool effects already committed are in the ledger; the session is
+            # in SQL. Nothing is lost — report the ledger truth, not a 500.
+            degraded = (
+                f"model call failed mid-run ({type(exc).__name__}); completed tool "
+                "actions are persisted in the ledger and the session is resumable"
+            )
+            break
     return {"final_text": final_text, "pending": pending, "degraded": degraded}
 
 
@@ -249,8 +268,18 @@ async def landing():
 
 @api.get("/static/{name}")
 async def static_asset(name: str):
-    """Serve a front-end asset (cinema director, etc.)."""
-    path = STATIC_DIR / Path(name).name
+    """Serve a front-end asset.
+
+    A deployment may layer extra assets over the built-ins by pointing
+    REAPER_STATIC_OVERLAY at a directory; overlay files win by name.
+    """
+    safe = Path(name).name
+    overlay = os.getenv("REAPER_STATIC_OVERLAY", "")
+    if overlay:
+        candidate = Path(overlay) / safe
+        if candidate.is_file():
+            return FileResponse(candidate)
+    path = STATIC_DIR / safe
     if not path.exists():
         raise HTTPException(404, "no such asset")
     return FileResponse(path)
