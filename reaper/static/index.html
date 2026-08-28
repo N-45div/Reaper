@@ -234,6 +234,8 @@ const ENTRY = {
   DECISION_RECOVERED: ["Decision recovered", "a signature survived the process that was carrying it", "good"],
   APPROVAL_RESET:     ["Approval reissued", "the paused run was lost; a fresh signature was requested", ""],
   DISPUTE_BACKSTOP:   ["Dispute filed by backstop", "the verdict stood even though the run ended early", ""],
+  CALL_TRANSCRIBED:   ["Call transcribed", "a phone call entered the record - audio hashed beside the transcript", ""],
+  CALL_UNREADABLE:    ["Call unreadable", "the recording is on file; it could not be transcribed", "bad"],
 };
 
 let obs = [], selId = null, lastReport = null;

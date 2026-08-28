@@ -101,6 +101,7 @@ root_agent = LlmAgent(
     instruction=INSTRUCTION,
     tools=[
         _offload(tools.gate_and_schedule),
+        _offload(tools.record_vendor_call),
         LongRunningFunctionTool(func=tools.request_notice_approval),
         _offload(tools.send_notice),
         _offload(tools.check_invoice),

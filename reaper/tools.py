@@ -2,8 +2,9 @@
 (deadline gate, invoice verdict, chain hashes) is computed here in plain code."""
 
 from datetime import date
+from pathlib import Path
 
-from . import delivery, inbox, ledger, precedent, vision
+from . import delivery, inbox, ledger, precedent, privacy, speech, vision
 from .date_engine import gate
 
 
@@ -439,3 +440,80 @@ def recall_precedent(obligation_id: int) -> dict:
             "this is a gap in context, not a finding about the contract"
         )
     return out
+
+
+def record_vendor_call(obligation_id: int, audio_path: str,
+                       who_called: str = "unknown") -> dict:
+    """Enter a phone call into the evidence chain by transcribing the recording.
+
+    Cancellations get confirmed on the phone and then denied on the invoice.
+    Every other channel here leaves a document; a call leaves a memory, and a
+    memory is exactly what a dispute discounts. The recording's SHA-256 is
+    stored beside the transcript, so the pair can be checked later: the
+    transcript re-derives from the file, and the file is provably the one read.
+
+    Args:
+        obligation_id: The obligation this call was about.
+        audio_path: Path to the call recording (wav, mp3, m4a, ogg).
+        who_called: "vendor" or "customer" - who placed the call, if known.
+    """
+    ob = ledger.get_obligation(obligation_id)
+    if ob is None:
+        return {"error": f"no obligation {obligation_id}"}
+
+    path = Path(audio_path)
+    if not path.exists():
+        return {"error": f"no recording at {audio_path}"}
+    data = path.read_bytes()
+
+    mime = {
+        ".wav": "audio/wav", ".mp3": "audio/mp3", ".m4a": "audio/mp4",
+        ".ogg": "audio/ogg", ".flac": "audio/flac", ".aac": "audio/aac",
+        ".mp4": "audio/mp4", ".webm": "audio/webm",
+    }.get(path.suffix.lower(), "audio/wav")
+
+    # Vendor names and contract vocabulary are what generic speech models
+    # mangle, and a mangled vendor name is weaker evidence than a spelled one.
+    heard = speech.transcribe_call(data, mime, vocabulary=[
+        ob.get("vendor") or "", "non-renewal", "notice period",
+        "auto-renewal", ob.get("recipient") or "",
+    ])
+
+    if not heard["ok"]:
+        ledger.log_access("CALL_UNREADABLE", {
+            "obligation_id": obligation_id,
+            "audio_sha256": heard["sha256"],
+            "error": heard["error"],
+            "note": "the recording is on file; it could not be transcribed",
+        })
+        return {"transcribed": False, "audio_sha256": heard["sha256"],
+                "error": heard["error"],
+                "note": "the call is recorded as unreadable rather than dropped"}
+
+    # The transcript passes the same model boundary as contract text: whatever
+    # was said, identifiers do not belong in a ledger anyone may later read.
+    red = privacy.redact(heard["text"], keep_emails=True)
+
+    receipt = ledger.append_receipt(obligation_id, "CALL_TRANSCRIBED", {
+        "audio_sha256": heard["sha256"],
+        "bytes": len(data),
+        "mime": mime,
+        "who_called": who_called,
+        "model": heard["model"],
+        "transcript": red.text,
+        "masked": red.total,
+        "audible": heard["audible"],
+        "inaudible_marks": heard["inaudible"],
+        "note": "verbatim transcript; the model was asked to transcribe and "
+                "nothing else - what was said is a fact, what it means is not "
+                "the transcriber's call",
+    })
+    return {
+        "transcribed": True,
+        "obligation_id": obligation_id,
+        "audio_sha256": heard["sha256"],
+        "receipt_hash": receipt["hash"],
+        "model": heard["model"],
+        "masked": red.total,
+        "transcript": red.text,
+    }

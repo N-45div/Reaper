@@ -32,6 +32,9 @@ MODEL_LADDER = [m.strip() for m in os.getenv(
     "gemini-3.5-flash,gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3.7-flash",
 ).split(",") if m.strip()]
 TRIAGE_MODEL = os.getenv("REAPER_TRIAGE_MODEL", "gemma-4-26b-a4b-it")
+# Speech is its own model, not a mode of the reasoning one: a transcriber
+# that only transcribes cannot be talked into summarising the call.
+TRANSCRIBE_MODEL = os.getenv("REAPER_TRANSCRIBE_MODEL", "gemini-3.5-transcribe")
 GCP_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "reaper-n45div")
 LEDGER_BACKEND = os.getenv("REAPER_LEDGER", "sqlite").lower()
 

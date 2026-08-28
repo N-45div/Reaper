@@ -9,6 +9,7 @@ import asyncio
 import time
 import io
 import os
+import tempfile
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
@@ -646,6 +647,33 @@ async def reoffer_approval(obligation_id: int):
         raise HTTPException(409, "nothing awaiting approval here")
     sent = await approvals.notify_pending(ob)
     return {"offered": sent, "channel": "telegram" if sent else None}
+
+
+@api.post("/obligations/{obligation_id}/call")
+async def record_call(obligation_id: int, file: UploadFile,
+                      who_called: str = "vendor"):
+    """Enter a phone call into the evidence chain.
+
+    The channel a cancellation is most often confirmed on is the one that
+    leaves no document. Uploading the recording gives the chain a transcript
+    and the audio's own SHA-256, so a vendor's "yes, that's cancelled" can be
+    produced later instead of remembered.
+    """
+    ob = await asyncio.to_thread(ledger.get_obligation, obligation_id)
+    if ob is None:
+        raise HTTPException(404, "unknown obligation")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(422, "the upload was empty")
+    tmp = Path(tempfile.gettempdir()) / f"reaper-call-{obligation_id}-{uuid.uuid4().hex[:8]}"
+    suffix = Path(file.filename or "call.wav").suffix or ".wav"
+    tmp = tmp.with_suffix(suffix)
+    tmp.write_bytes(raw)
+    try:
+        return await asyncio.to_thread(
+            tools.record_vendor_call, obligation_id, str(tmp), who_called)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 @api.get("/access")
