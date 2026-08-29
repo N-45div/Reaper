@@ -14,22 +14,14 @@ delivery receipt — then reads the *next invoice* to verify the vendor really
 stopped billing. If they billed anyway, it opens the dispute itself, attaching
 its own timestamped receipt as evidence.
 
-```
-contract in ───► READ & GATE   Gemini quotes the renewal clause verbatim;
-                               a deterministic date engine re-derives the
-                               deadline. MATCH → scheduled · disagreement
-                               → BLOCKED, a human is asked
-        ⏸  SLEEP               months pass; zero tokens burned
-        ⏰  WAKE                the calendar reaches the window — no human
-                               trigger, and the wake is itself a receipt
-        ✍  SIGN                ONE human approval, on a phone; the pause is
-                               durable and survives full process restarts
-        ✉  SERVE               real SMTP notice; the Message-ID is hash-
-                               chained as delivery evidence
-next invoice ──► VERIFY        billed vs expected is arithmetic, not opinion
-                               VERIFIED → done · REFUTED → dispute filed,
-                               delivery receipt attached
-```
+| | the step | what actually happens |
+|---|---|---|
+| **contract in** | `READ & GATE` | Gemini quotes the renewal clause verbatim; a deterministic date engine re-derives the deadline from the same text. `MATCH` schedules it — any disagreement is `BLOCKED` and a human is asked |
+| | `SLEEP` | months pass, zero tokens burned |
+| | `WAKE` | the calendar reaches the notice window. No human trigger, and the wake is itself a receipt |
+| | `SIGN` | one human approval, in the app or on a phone. The pause is durable and survives the process being killed |
+| | `SERVE` | a real SMTP notice; the Message-ID is hash-chained as delivery evidence |
+| **next invoice** | `VERIFY` | billed vs expected is arithmetic, not opinion. `VERIFIED` → done · `REFUTED` → the dispute files itself, delivery receipt attached |
 
 ## Three rules it never breaks
 
