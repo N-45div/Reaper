@@ -1,0 +1,23 @@
+# Cloud Build only needs the app. Without this, `gcloud run deploy --source .`
+# uploads the whole working tree, including local scratch data and the
+# virtualenv - gigabytes that never belong in a container build.
+.git/
+.gcloudignore
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.adk/
+tests/
+docs/
+scripts/
+.env
+*.mp4
+*.mkv
+*.db
+*.db-shm
+*.db-wal
+# data/ is local scratch, EXCEPT the sample contracts the image serves
+data/*
+!data/contracts/
+!data/contracts/**

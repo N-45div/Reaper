@@ -6,9 +6,10 @@ optional live channels documented at the end.
 
 ## The hosted instance (nothing to install)
 
-A live test instance runs at **https://reaper-sxxs.onrender.com** — the app UI
+A live test instance runs at **https://reaper-t2w3ltp6fa-uc.a.run.app** — the app UI
 is at `/app`, and it writes to the same Firestore ledger shown in the demo
-video. Compute is on Render's free tier; the evidence chain is on Google Cloud.
+video. Compute is Cloud Run; the ledger is Firestore, the sessions Cloud SQL and
+the precedent store BigQuery - all in the same Google Cloud project.
 Judges can exercise the whole arc there, including `POST /chaos/kill` to prove
 the approval pause survives a process death. The instance may take ~30 seconds
 to answer the first request if it has been idle.
@@ -215,7 +216,7 @@ the (key, model) pair. Two commands answer "can this actually run right now?":
 
 ```bash
 # what the running instance believes it has left (no API calls, no keys printed)
-curl -s https://reaper-sxxs.onrender.com/quota
+curl -s https://reaper-t2w3ltp6fa-uc.a.run.app/quota
 
 # ask every pair directly - one realistic request each
 python scripts/quota_census.py
@@ -237,9 +238,9 @@ see the same picture before depending on it.
 asserts every transition, with no browser involved:
 
 ```bash
-python scripts/smoke_hosted.py https://reaper-sxxs.onrender.com            # full arc
-python scripts/smoke_hosted.py https://reaper-sxxs.onrender.com --preroll  # up to the phone offer
-python scripts/smoke_hosted.py https://reaper-sxxs.onrender.com --from-kill  # continue a primed world
+python scripts/smoke_hosted.py https://reaper-t2w3ltp6fa-uc.a.run.app            # full arc
+python scripts/smoke_hosted.py https://reaper-t2w3ltp6fa-uc.a.run.app --preroll  # up to the phone offer
+python scripts/smoke_hosted.py https://reaper-t2w3ltp6fa-uc.a.run.app --from-kill  # continue a primed world
 ```
 
 The full arc covers: reset, intake, the trap clause, precedent recall, the

@@ -309,32 +309,38 @@ than asking the silent one again.
 ```mermaid
 flowchart TD
     subgraph gcp["Google Cloud"]
-        gemini["Gemini API<br/>Gemini 3.5 Flash · Gemma 4 · vision"]
+        gemini["Gemini API<br/>Gemini 3.5 Flash · Gemma 4 · vision<br/>gemini-embedding-001 · gemini-3.5-transcribe"]
         fs[("Firestore<br/>obligations · receipts · activity · clock")]
-        shell["Cloud Shell VM<br/>backend runs here in the demo"]
+        run["Cloud Run<br/>the deployed service, built from this repo"]
         bq[("BigQuery<br/>precedent memory: clause shapes,<br/>outcomes, vector search")]
-        sched["Cloud Scheduler → Pub/Sub<br/>production wake slot"]
+        sql[("Cloud SQL · Postgres 15<br/>ADK session store: where a paused run waits")]
+        sched["Cloud Scheduler<br/>POST /tick every minute"]
     end
 
     app["Reaper server<br/>FastAPI + ADK runner"]
 
     app <--> gemini
     app <--> fs
+    app <-->|"paused invocation"| sql
     app -->|"advisory recall"| bq
-    shell --- app
-    sched -.->|"production path for the ticker"| app
+    run --- app
+    sched -->|"the self-wake, at scale-to-zero"| app
 ```
 
-Today the wake path is a self-owned asyncio ticker inside the server (every
-wake is a `WOKE` receipt — the agent acts unprompted, on calendar time). The
-ticker's production slot is Cloud Scheduler firing through Pub/Sub; the
-Dockerfile in the repo root builds the container for that deployment.
+The wake path runs both ways, from one body. Locally a self-owned asyncio
+ticker calls `_tick_once()` on a loop; on Cloud Run the container does not
+exist between requests, so Cloud Scheduler calls `POST /tick` every minute and
+that same `_tick_once()` runs. Deliberately not two implementations: a
+separate "scheduled" path would drift from the one the demo exercises. Either
+way each wake is a `WOKE` receipt — the agent acts unprompted, on calendar
+time — and `/tick` requires a shared secret, because an open heartbeat on a
+public URL is a way for a stranger to spend your model quota.
 
 ## Module index
 
 | Module | Responsibility |
 |---|---|
-| `main.py` | FastAPI surface, intake choke point, ticker, approval delivery, chaos kill |
+| `main.py` | FastAPI surface, intake choke point, `_tick_once()` + `/tick`, approval delivery, chaos kill |
 | `reaper/agent.py` | The single resumable `LlmAgent`, phase instructions, model rotation hook |
 | `reaper/tools.py` | Agent tools: gate-and-schedule, send notice, check invoice, open dispute |
 | `reaper/date_engine.py` | Deterministic deadline re-derivation and the MATCH/MISMATCH/AMBIGUOUS gate |
