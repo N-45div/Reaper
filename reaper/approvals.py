@@ -39,6 +39,19 @@ def _api(method: str) -> str:
 async def notify_pending(obligation: dict, receipt_hash: str | None = None) -> bool:
     """Offer the approval on the phone. Returns True if the message went out."""
     if not configured():
+        # The approval is still on offer — in the app — and a ledger that only
+        # recorded phone offers would hold no evidence that a human was ever
+        # asked. The receipt names the channel that actually carries it, and
+        # lands in the same place in the sequence: strictly after the resume
+        # pointer is persisted, so it still marks the pause as durable.
+        try:
+            ledger.append_receipt(obligation["id"], "APPROVAL_OFFERED", {
+                "channel": "in-app",
+                "note": "no phone channel configured; the signature is offered "
+                        "in the app only",
+            })
+        except Exception:
+            pass
         return False
     oid = obligation["id"]
     # One open pause, one token. Minting a fresh one for every offer silently
