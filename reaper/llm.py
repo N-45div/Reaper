@@ -49,8 +49,20 @@ _HTTP_OPTIONS = genai_types.HttpOptions(
 )
 
 
+# Vertex authenticates with the runtime's own service account, so there is no
+# key to hold, rotate or rotate OUT of - and the quota is the project's paid
+# quota rather than the 20-a-day free-tier bucket that key rotation exists to
+# survive. The rest of this module still reasons in "keys", so Vertex presents
+# itself as a single sentinel key and every bucket path keeps working unchanged.
+VERTEX = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").strip().lower() in (
+    "1", "true", "yes", "on")
+_VERTEX_KEY = "vertex://application-default"
+
+
 def keys() -> list[str]:
     """Every configured key, primary first."""
+    if VERTEX:
+        return [_VERTEX_KEY]
     found, seen = [], set()
     for raw in (os.getenv("GOOGLE_API_KEY", ""), os.getenv("GOOGLE_API_KEYS", "")):
         for k in raw.split(","):
@@ -76,7 +88,14 @@ def client() -> genai.Client:
         raise RuntimeError("no GOOGLE_API_KEY configured")
     key = ks[_index % len(ks)]
     if key not in _clients:
-        _clients[key] = genai.Client(api_key=key, http_options=_HTTP_OPTIONS)
+        if key == _VERTEX_KEY:
+            _clients[key] = genai.Client(
+                vertexai=True,
+                project=os.getenv("GOOGLE_CLOUD_PROJECT", ""),
+                location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+                http_options=_HTTP_OPTIONS)
+        else:
+            _clients[key] = genai.Client(api_key=key, http_options=_HTTP_OPTIONS)
     return _clients[key]
 
 
