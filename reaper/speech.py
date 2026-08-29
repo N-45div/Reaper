@@ -29,17 +29,18 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Transcription only. The moment this prompt starts asking for conclusions, the
 # receipt stops being a record of what was said and becomes an opinion.
-PROMPT = """Transcribe this call recording.
+#
+# Tested, not assumed: this is a dedicated speech model, not an instruct model.
+# It transcribes and ignores formatting directions - asked for "SPEAKER 1 /
+# SPEAKER 2" labels it returns the same unlabelled paragraph either way. So the
+# receipt stores an unlabelled verbatim transcript and records the direction of
+# the call in who_called, rather than printing labels the model never assigned.
+PROMPT = """Transcribe this recording verbatim.
 
-Rules:
-- Write what was said, verbatim. Never summarise, correct, or complete a
-  sentence the speaker did not finish.
-- Label speakers as SPEAKER 1, SPEAKER 2 ... in the order they first speak.
-- Keep dates, amounts, reference numbers and vendor names exactly as spoken.
-- If a passage is genuinely inaudible, write [INAUDIBLE] rather than guessing.
-- Do not add commentary, headings or a summary.
-
-Output the transcript only."""
+Keep dates, amounts, reference numbers and vendor names exactly as spoken.
+Write [INAUDIBLE] for any passage that cannot be made out, rather than guessing
+at it. Do not summarise, correct, or complete a sentence the speaker did not
+finish."""
 
 
 def audio_digest(data: bytes) -> str:
@@ -55,12 +56,15 @@ def transcribe_call(data: bytes, mime_type: str,
     record, not an exception that loses the recording as well.
     """
     digest = audio_digest(data)
-    prompt = ""
+    # The rules travel WITH the audio or they do not apply: without this the
+    # model returns an unlabelled paragraph, and "who said you will not be
+    # billed" is the one thing the receipt exists to answer.
+    prompt = PROMPT
     if vocabulary:
         # Vendor names and contract terms are exactly what generic speech models
         # mangle, and a mangled vendor name is a weaker piece of evidence.
         terms = ", ".join(dict.fromkeys(v.strip() for v in vocabulary if v.strip()))
-        prompt = f"Expect these terms and spell them this way: {terms}."
+        prompt += f"\n\nExpect these terms and spell them this way: {terms}."
     # The transcription models answer on the interactions surface, not the
     # generate_content one: asked through generate_content they return an empty
     # part instead of an error - a silence that looks like success.
